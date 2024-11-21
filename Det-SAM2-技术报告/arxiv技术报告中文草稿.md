@@ -181,7 +181,7 @@ SAM2【1】官方源码支持在CPU、GPU和NPU上运行，但由于我们自己
 
 4. 我们意外地发现Memory Attention计算在我们的pipeline中会产生大量未被及时释放的中间变量占用显存，因此我们需要在Memory Attention计算后手动释放显存，我们发现它可以在Det-SAM2-pipeline中显出降低显存占用上限。具体做法见附录【A2】
 
-5. 同样受到官方代码仓库中issue【6】的启发，我们尝试了将图像以FP16半精度存储而非原始的FP32，这样可以在1920*1080分辨率下节约0.007G/帧的内存开销，且几乎不会损失分割mask的效果。
+5. 同样受到官方代码仓库中issue【7】的启发，我们尝试了将图像以FP16半精度存储而非原始的FP32，这样可以在1920*1080分辨率下节约0.007G/帧的内存开销，且几乎不会损失分割mask的效果。
 
 6. 在显存占用恒定时，我们想进一步降低内存占用线性增长的速度，我们希望不断的清除旧数据的时候，也能不断的清除视频帧缓存，即`inference[”images“]`中缓存的视频帧。尽管已经通过`offload_video_to_cpu=True`参数卸载到CPU内存中，但我们仍然希望这一部分是恒定占用（1920*1080分辨率下0.025G/帧）。
    为了实现这一功能，我们需要进行四项改动：
@@ -260,9 +260,11 @@ SAM2【1】官方源码支持在CPU、GPU和NPU上运行，但由于我们自己
 
 【4】Jocher, Glenn, et al. "ultralytics/yolov5: v3. 1-bug fixes and performance improvements." *Zenodo* (2020).
 
-【5】https://github.com/facebookresearch/sam2/issues/352
+【5】https://github.com/facebookresearch/sam2/issues/210
 
-【6】https://github.com/facebookresearch/sam2/issues/196
+【6】https://github.com/facebookresearch/sam2/issues/196#issuecomment-2286352777
+
+【7】https://github.com/facebookresearch/sam2/issues/196#issuecomment-2475114783
 
 
 
