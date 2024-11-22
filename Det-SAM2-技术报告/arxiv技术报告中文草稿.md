@@ -64,7 +64,7 @@ Segment Anything Model 2（SAM2）【1】是目前视频分割领域的SOTA模�
 
 当我们的Det-SAM2能够无需人工干预地启动分割预测时，我们也希望它能够继承SAM2【1】强大的修正能力，而非仅仅依靠初始帧的提示信息来推断出整个视频的预测结果。我们希望在video stream中向SAM2不断地添加由检测模型自动生成的Box prompt。由于SAM2的修正机制，每当SAM2接收到新的prompt时，SAM2会将新的prompt信息向此前推理过的所有帧进行一次propagate（propagate_in_video），从而将接收到新prompt的memory bank重新参与到此前每一帧的memory attention中，重新计算出每一帧的分割mask，以此实现修正的功能。
 
-当我们实现在Det-SAM2框架中自动地为每一帧都添加条件提示时，示意图如【图4】所示。其与【图3】的区别仅仅在于我们在每一帧中多次调用了detection model分支。同时Det-SAM2 in video stream【图4】在时间维度（视频流走向）上的示意图如【图5】所示。
+当我们实现在Det-SAM2框架中自动地为每一帧都添加条件提示时，示意图如【图4】所示。其与【图3】的区别仅仅在于我们在每一帧中都调用了detection model分支。同时Det-SAM2 in video stream【图4】在时间维度（视频流走向）上的示意图如【图5】所示。
 
 ![Det-SAM2框架图](./asset/Det-SAM2框架图.jpg)
 
