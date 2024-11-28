@@ -247,6 +247,12 @@ In the context of high-speed ball movement on a billiard table, Det-SAM2 can aut
 
 **2.** In our series of engineering implementations for resource optimization, we have constrained the capacity of the memory bank to store only a limited number of recent frame hints. This limitation will inevitably have an impact on videos with a large object association span. The positive aspect is that our detection branch can consistently provide hint information for the specified object categories throughout the entire video, serving as a continuous and fixed pseudo-memory source. However, to ensure optimal results, we still need to carefully adjust the maximum capacity of the memory bank in practical scenarios to determine the ideal value. This process can also be automated through a script designed to evaluate the best combination of parameters.
 
+
+
+To maintain constant GPU memory usage, we have constrained the size of the memory bank. However, the question arises: is it possible to achieve constant memory usage while retaining comprehensive memory information? A potential direction for future research could involve rethinking the design of the memory bank by adopting architectures such as RWKV [8], which utilize weight-based state representations. This approach may facilitate multi-frame memory storage within a fixed parameter space.
+
+
+
 **3.**  One notable issue is the conceptual gap between the detection model and SAM2 during inference. The detection model outputs categories, and multiple objects of the same category can exist within a single frame. Conversely, SAM2 receives object IDs, and each object ID corresponds to only one object in a frame. A limitation of our Det-SAM2 is that it can only be used in scenarios where each category can only appear once in each frame. For example, in a pool game scenario, the detection model's output needs to treat each ball as a separate category, ensuring that each ball has a unique object ID when passed to SAM2. However, if our detection model only distinguishes between the cue ball and other balls, or only between solid and striped balls, SAM2 will face the problem of receiving multiple different prompts for the same object ID at different positions, which confuses SAM2.
 
 We have not yet resolved the gap between the detection model's output categories and SAM2's concept of receiving object IDs in Det-SAM2. Some potential solutions involve adding engineering checks to manually assign unique and fixed SAM2 object IDs to different objects of the same detection category. However, this raises the challenge of how to differentiate between various objects of the same detection category to ensure that their IDs remain consistently matched.
@@ -270,6 +276,7 @@ This article presents the implementation process of Det-SAM2, a framework based 
 【6】https://github.com/facebookresearch/sam2/issues/196#issuecomment-2286352777
 
 【7】https://github.com/facebookresearch/sam2/issues/196#issuecomment-2475114783
+【8】Bo Peng, Eric Alcaide, Quentin Anthony, Alon Albalak, Samuel Arcadinho, Stella Biderman, Huanqi Cao, Xin Cheng, Michael Chung, Matteo Grella, et al. Rwkv: Reinventing rnns for the transformer era. arXiv preprint arXiv:2305.13048, 2023
 
 #### Appendix
 
