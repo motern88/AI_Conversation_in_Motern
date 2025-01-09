@@ -15,7 +15,8 @@
 
 我们首先实现一个更细粒度模态对齐的VideoEncoder：在CLIP-ViP基础上引入Patch与Token之间的对比学习损失。其次使用改进后的CLIP-ViP和Long-CLIP组成视频-图像双塔视觉提取模块，经过特征融合后作为Gemma-2B语言模型的视觉输入，实现基于视频理解的对话能力。
 
-项目技术报告：https://arxiv.org/abs/2407.07325；项目地址：https://github.com/motern88/HiLight/tree/main
+项目技术报告：https://arxiv.org/abs/2407.07325
+项目地址：https://github.com/motern88/HiLight/tree/main
 
 
 积累技术储备：
@@ -86,7 +87,8 @@ SAM2的出现使得根本性解决单视角物体追踪成为了可能，我们�
 
 我们基于SAM2实现了一个实时推理视频流并由检测模型自动提供条件提示的长视频分割pipeline，是第一个功能完备的长视频自提示SAM2框架。其支持推理过程中在线添加新类别、将推理上一段视频的记忆用于新视频推理（预加载记忆库）等新功能。同时，我们实现了在完整Det-SAM2-pipeline上恒定的显存和内存开销，从而支持一次性推理无限长的视频。
 
-项目技术报告：https://arxiv.org/abs/2411.18977；项目地址：https://github.com/motern88/Det-SAM2/tree/main
+项目技术报告：https://arxiv.org/abs/2411.18977
+项目地址：https://github.com/motern88/Det-SAM2/tree/main
 
 
 
