@@ -32,7 +32,7 @@ transformer替代模型在效率和性能方面也有一些潜力：
 
 SAM解决了两个主要任务：分割任意物体（SegAny）和分割一切物体（SegEvery）。讨论主要从这两个任务的角度讨论一些改进工作。
 
-![image-20250115093228043](.\assets\Variants_of_SAM.png)
+![image-20250115093228043](./assets/Variants_of_SAM.png)
 
 #### 3.1 加速SegAny任务
 
@@ -46,7 +46,7 @@ SegAny任务的主要瓶颈在于SAM的笨重架构。一个简单的解决方�
 
 由于实例分割已被许多基于cnn的方法有效解决，FastSAM采用YOLOv8-Seg模型，使用YOLACT方法以提高性能。然而，作为SAM的早期高效变体，FastSAM仍然有一些限制，例如为较小的物体生成低质量的mask，以及生成边界不那么平滑的mask。
 
-![image-20250115144635987](.\assets\FastSAM.png)
+![image-20250115144635987](./assets/FastSAM.png)
 
 - SqueezeSAM
 
@@ -54,7 +54,7 @@ SegAny任务的主要瓶颈在于SAM的笨重架构。一个简单的解决方�
 
 SqueezeSAM的一个独特之处在于处理提示。与SAM在解码阶段使用提示符不同，SqueezeSAM采用了早期融合策略，在将编码的提示作为额外的输入通道输入编码器之前，将其添加为额外的输入通道。SqueezeSAM主要是为部署在摄影应用程序而设计的，在这些应用程序中需要高效的交互式分割。如图所示，其工作流程涉及生成显著对象的初始掩码，然后通过用户点击进行细化的细粒度分割。
 
-![image-20250115144421924](.\assets\SqueezeSAM.png)
+![image-20250115144421924](./assets/SqueezeSAM.png)
 
 **SAM-like体系结构**
 
@@ -62,7 +62,7 @@ SqueezeSAM的一个独特之处在于处理提示。与SAM在解码阶段使用�
 
   EfficientSAM [143]保留了SAM的原始架构，使用ViT-tiny或ViT-small作为轻量级编码器，利用基于SAM的掩码图像（SAMI）预训练策略从头开始重新训练，SAMI改编自掩码自动编码器（MAE）框架。SAMI遵循一个编码器-解码器管道：编码器从未掩码patch中生成潜在特征表示，而解码器重建掩码patch的缺失嵌入。该过程由重建损失监督，将SAM的ViT-H编码器产生的嵌入与SAMI管道产生的嵌入进行比较。预训练后，从SAMI流水线中提取轻量级编码器，并与SAM的其他组件集成，形成EfficientSAM。最后一步涉及在SA-1B数据集上对整个模型进行微调，以进一步对齐和细化。
 
-  ![image-20250115145358730](.\assets\EfficientSAM.png)
+  ![image-20250115145358730](./assets/EfficientSAM.png)
 
 - RAP-SAM
 
@@ -84,7 +84,7 @@ SqueezeSAM的一个独特之处在于处理提示。与SAM在解码阶段使用�
 
   提出了一种仅编码器的蒸馏策略，如图所示，旨在将ViT-H的视觉表示能力迁移到TinyViT。使用的损失函数是两个编码器的输出图像嵌入之间的简单均方误差（MSE）
 
-![image-20250116100430283](.\assets\MobileSAM.png)
+![image-20250116100430283](./assets/MobileSAM.png)
 
 - ESAM
 
@@ -94,7 +94,7 @@ SqueezeSAM的一个独特之处在于处理提示。与SAM在解码阶段使用�
 
   为了解决仅编码器蒸馏会导致性能显著下降，提出了硬挖掘全阶段知识蒸馏策略，以实现更有效的蒸馏。如图该策略不仅监督图像嵌入，还监督输出token和输出掩码，所有都使用L1损失。引入了硬掩码加权策略，该策略为更难预测的掩码分配较大的权重，从而提高了学习效率。
 
-![image-20250116102059629](.\assets\TinySAM.png)
+![image-20250116102059629](./assets/TinySAM.png)
 
 （**ii**）CNN的编码器
 
@@ -112,7 +112,7 @@ SqueezeSAM的一个独特之处在于处理提示。与SAM在解码阶段使用�
 
   用更轻量和高效的纯cnn的RepViT取代了基于transformer的编码器，旨在在资源受限的设备上获得更好的性能。与ESAM类似，这篇文章认为，仅编码器蒸馏是不充分的，因为它是任务无关的，不能完全捕获模型的特定任务需求。他们提出了提示在环蒸馏方法，该方法为输出掩码添加了额外的监督。“在环提示”是指一种动态采样策略，从教师和学生的预测掩模的非重叠区域中迭代采样新的提示。经过多次迭代后，通过反向传播累积的损失来更新编码器和解码器。为了进一步提高输出质量，EdgeSAM提供了一个可选模块，该模块嵌入了特定数据集的粒度先验。
 
-![image-20250116105204712](.\assets\EdgeSAM.png)
+![image-20250116105204712](./assets/EdgeSAM.png)
 
 （iii）注意力修正编码器
 
@@ -124,7 +124,7 @@ SqueezeSAM的一个独特之处在于处理提示。与SAM在解码阶段使用�
 
   一种专门为3D体医学图像设计的高效SAM模型。该工作的关键贡献是开发了3D稀疏Flash注意力机制。这种注意力方法结合了3D扩张注意力和FlashAttention的优点，以加速计算。FastSAM3D使用改进的ViT-Tiny作为图像编码器，从ViT-Base编码器中提取，确保了效率而不影响性能。作者实现了一种逐层渐进蒸馏策略，以迭代地对齐两个编码器之间的特征映射，如图所示
 
-  ![image-20250116114213187](.\assets\FastSAM3D.png)
+  ![image-20250116114213187](./assets/FastSAM3D.png)
 
 - SAM-Lightening
 
@@ -154,7 +154,7 @@ SqueezeSAM的一个独特之处在于处理提示。与SAM在解码阶段使用�
 
 剪枝应用于SAM的重型编码器时，第一步涉及估计权重和激活值的重要性，以确定应该修剪哪些编码器。评估重要性背后的核心思想是评估给定参数和不给定参数产生的损失的差异。SlimSAM引入了扰动泰勒重要性方法，该方法使用一阶泰勒展开来近似参数的重要性，并引入高斯噪声*N*来防止梯度变为零。
 
-![image-20250116144706833](.\assets\SlimSAM.png)
+![image-20250116144706833](./assets/SlimSAM.png)
 
 ##### 3.1.5 基于代码重构的方法
 
@@ -174,13 +174,13 @@ SegAny任务的主要效率瓶颈在于重图像编码器，然而SegEvery任务
 
   用密集的点网格（例如，32*32,64*64）通常会产生大量冗余的掩码，然后在后处理期间被过滤掉，这一操作会导致大量的时间成本。事实上，只有网格内的几个点就需要产生自信的口罩。为了解决这种低效率问题，TinySAM提出了一种高效采样的分层策略，逐步选择最优点生成掩模。
 
-  ![image-20250116152758429](.\assets\TinySAM_sample_strategy.png)
+  ![image-20250116152758429](./assets/TinySAM_sample_strategy.png)
 
 - Lite-SAM
 
   Lite-SAM采用了一种称为Lite-ViT的CNN-transformer混合结构，它由四个阶段组成，分别有2、2、6和2个Lite-ViT块。Lite-ViT的关键创新是多尺度池模块（MSPM），它是传统注意机制的替代品。MSPM利用通道级的层规范，并将池化操作扩展到多个尺度。如前所述，SAM中的另一个主要瓶颈是耗时的网格采样策略。为了解决这个问题，Lite-SAM引入了一个自动提示建议网络（AutoPPN）来提高采样效率。AutoPPN将编码器生成的特征映射作为输入，并直接预测点和框提示。为了确保高质量的提示，Lite-SAM使用了一个更强大的基于MSPM的网络，而不是cnn，并结合距离变换来估计点提示的置信度。虽然Lite-SAM主要是为了加速SegEvery的任务，但由于其轻量级的图像编码器，它也证明了SegAny任务的效率提高。
 
-![image-20250116151936512](.\assets\Lite-SAM.png)
+![image-20250116151936512](./assets/Lite-SAM.png)
 
 #### 3.3 几个潜在的未来研究方向
 
@@ -211,7 +211,7 @@ SegAny任务的主要效率瓶颈在于重图像编码器，然而SegEvery任务
 数据集：COCO2017、LVIS v1
 效率指标：\#*Params*, *FLOPs*, *Memory Usage*、效率误差率（EER）
 
-![image-20250116161024570](.\assets\EER.png)
+![image-20250116161024570](./assets/EER.png)
 
 runtime 、throughput
 
@@ -221,17 +221,17 @@ runtime 、throughput
 
 利用工具*calflops*获得的结果：
 
-![image-20250116161509292](.\assets\Efficiency_comparison.png)
+![image-20250116161509292](./assets/Efficiency_comparison.png)
 
 EdgeSAM的参数量最低、FLOPs最低、EER最低。EfficientViT-SAM-XL1EER最高。
 
 对于SegAny任务，每个图像都会提示50个固定的bbox。我们记录了每10个bbox的累积时间，并通过一个曲线图来说明结果。在此基础上，我们计算了SegAny任务的推理延迟（处理一张图中个框提示所需的平均时间）
 
-![image-20250116162236416](.\assets\Latency.png)
+![image-20250116162236416](./assets/Latency.png)
 
 在COCO验证集上测试了执行SegAny任务时每个模型的吞吐量，使用grouding truth 目标框作为提示
 
-![image-20250116171449747](.\assets\run_in_device.png)
+![image-20250116171449747](./assets/run_in_device.png)
 
 EfficientViT-SAM-L0表现出最短的推理时间（CPU、GPU）。
 
@@ -244,7 +244,7 @@ EdgeSAM也比较低延迟 CPU259 ms 和边缘设备713 ms。
 
 
 对于SegEvery任务，使用不同的点网格大小（16X16、 32X32、64X64）或专门的采样策略为图像生成所有mask所需的平均时间，结果如表下所示：SAMfastH展示了最高的效率，延迟为848ms---比SAM-H快两倍多。
-![image-20250116190211028](.\assets\SegEvery.png)
+![image-20250116190211028](./assets/SegEvery.png)
 
 在采样策略上，FastSAM效率最高
 
@@ -254,7 +254,7 @@ EdgeSAM也比较低延迟 CPU259 ms 和边缘设备713 ms。
 
 为了评估SegAny任务，我们采用两种类型的点作为提示： 1)ground truth边界框的中心点，2)从地面真实掩模中均匀采样的随机点。我们在COCO和LVIS上评估了mIoU。当提示中心点时，SAM2-B+和EfficientViT-SAM-XL1的mIoU在COCO数据集上达到最高，为54.3%，超过SAM-H为53.6%，而在LVIS数据集上，SAMfast-H的mIoU为53.6%，在所有模型中表现最好。在随机点提示设置下，当有3个点提示时，EfficientViT-SAM-XL1在两个数据集上的性能都优于SAM-H，分别增加了2.7%和0.7%。从数据集的角度来看，我们观察到LVIS的结果普遍低于COCO。
 
-![image-20250116193543591](.\assets\mIoU.png)
+![image-20250116193543591](./assets/mIoU.png)
 
 此外，还通过两种类型的框提示来评估SegAny任务的准确性： 1)ground truth边界框和2)对应ground truth的最紧边界框。
 
@@ -262,13 +262,13 @@ EfficientViT-SAM-XL1在每个box提示设置中的准确率最高。
 
 例如分割任务，我们采用ViTDet、YOLOv8 、Grounding DINO、Detic和H-Deformable-DETR和Swin-L作为对象探测器，生成潜在对象的边界框。我们评估了所有物体的平均精度（AP），以及小、中、大物体的AP，结果如下。与之前的结果相似，我们发现在COCO数据集上，EfficientViT-SAMXL1对任何探测器都具有最高的AP（除了H-Deformable-DETR）。在设置装备ViTDet作为检测器和LVIS数据集的测试下，SAMfast-H超过了所有其他变体，AP为44.5%
 
-![image-20250116194426542](.\assets\instance_segmentation1.png)
+![image-20250116194426542](./assets/instance_segmentation1.png)
 
-![image-20250116194623100](.\assets\instance_segmentation2.png)
+![image-20250116194623100](./assets/instance_segmentation2.png)
 
 用吞吐量-mIoU散点图来观察效率-精度之间的权衡。（COCO数据集上评估的吞吐量和mIoU，以ground truth边界框作为提示)
 
-![image-20250116194755018](.\assets\mIoU vs. throughput.png)
+![image-20250116194755018](./assets/mIoU vs. throughput.png)
 
 ### 第5节 总结
 
