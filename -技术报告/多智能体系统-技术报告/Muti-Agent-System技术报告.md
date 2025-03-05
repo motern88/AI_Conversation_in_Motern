@@ -376,7 +376,7 @@ https://github.com/OpenBMB/ChatDev
 
 #### 聊天链
 
-尽管大语言模型（LLMs）在自然语言和编程语言方面表现出良好的理解能力，但要高效地将文本需求一步转化为可运行的软件仍然是一个重大挑战。因此，ChatDev 采用瀑布模型的核心原则，并使用**聊天链（$C$）**来组织软件开发流程。该流程由**顺序阶段（$P$）**组成，每个阶段包含**顺序子任务（/T）**。
+尽管大语言模型（LLMs）在自然语言和编程语言方面表现出良好的理解能力，但要高效地将文本需求一步转化为可运行的软件仍然是一个重大挑战。因此，ChatDev 采用瀑布模型的核心原则，并使用**聊天链（$C$）**来组织软件开发流程。该流程由**顺序阶段（$P$）**组成，每个阶段包含**顺序子任务（T）**。
 
 具体而言，ChatDev 将软件开发过程划分为三个顺序阶段：设计、编码和测试。其中，编码阶段进一步细分为代码编写和代码补全子任务，测试阶段则分为代码审查（静态测试）和系统测试（动态测试），如图 1 所示。
 
@@ -639,13 +639,13 @@ XAgent提出了**双循环机制**，外循环负责宏观规划，而内循环�
 
 如果确定尚未达到预期目标，则奖励反馈循环回到初始阶段，即专家招募；在下一轮专家招募阶段会利用该反馈信号结合初始目标来调整专家组的构成，从而演化出更有效的多智能体群组，以供后续决策和行动执行
 
-------
 
 
 
 
 
-## 2. Muti-Agent-System 
+
+# 2. Muti-Agent-System 
 
 <img src="./asset/多智能体系统组成.jpg" alt="多Agent系统组成" style="zoom:13%;" />
 
@@ -664,11 +664,13 @@ Agent之间的协作（MAS）：
 
 
 
+## 2.1 Agent内部的构建：一个LLM System
+
+在构建一个Agent基元时，我们主要从三个方面入手:
+
+LLM系统的迭代与推理优化，Agent tools 工具库的完善， Agent内部工作流的逻辑闭环
 
 
-
-
-### 2.1 Agent内部的构建：一个LLM System
 
 ### 2.1.1 LLM系统的迭代与推理优化
 
@@ -688,11 +690,97 @@ Overal preformance 整体性能评估。衡量系统实现核心目标的有效�
 
 ### 2.1.2 LLM系统的工具库
 
+工具使用：给LLM提供工具，如网络搜索、代码执行或任何其他功能，以帮助它收集信息、采取行动或处理数据。
+
+
+
 
 
 ### 2.1.3 Agent单元的工作流程（逻辑闭环）
 
-#### 2.1.3.1 反思Reflection 工作流
+Agent单元内部的工作流程，是Agent在多Agent系统中处理某一任务中某一step的具体执行方式。若把整个Muti-Agent-System的任务分发与监控看作是一个大循环的话，则Agent内部执行某一具体任务的方式为一个内循环（小循环）。
+
+在23年及其以前的早期Agent研究中，研究者们主要聚焦于单个Agent的工作流程，其中包括吴恩达教授指出的两种Agent工作流模式：反思工作流（2.1.3.1）与规划工作流（2.1.3.2）
+
+在24年后，反思与规划这两大功能主要被集成在多Agent协作大框架中任务的大循环里。但我们仍然可以学习反思工作流与规划工作流的相关研究以指导我们单个Agent内的工作流程设计。
+
+
+
+#### 2.1.3-A 反思Reflection 工作流
+
+##### A1. Self-Refine: Iterative Refinement with Self-Feedback
+
+英伟达、谷歌Brain等联合发布 https://arxiv.org/abs/2303.17651
+
+一种通过迭代反馈和细化来改进LLMs的初始输出的方法。不使用任何监督训练数据、额外的训练或强化学习，而是使用单个LLM作为生成器、细化器和反馈提供者。
+
+![image-20250305150644758](./asset/Self-Refine1.png)
+
+图一注：给定一个输入（ 0 ），Self-Refine 机制首先由模型 M 生成初始输出，并将其反馈回模型自身以获取反馈（ 1 ）。   随后，该反馈被再次传递给模型 M，使其对先前生成的输出进行优化（ 2 ）。   步骤（ 1 ）和（ 2 ）会不断迭代，直到满足停止条件。
+
+![image-20250305151552961](./asset/Self-Refine2.png)
+
+图二注：由基本 LLM 生成的初始输出（蓝色），然后传递回同一 LLM 以接收对同一 LLM 的反馈（红色）以优化输出（黄色）。顶行说明了对话生成方面的这一点，其中初始对话响应可以转换为更具吸引力的对话响应，该响应也可以通过应用反馈来理解用户。底行说明了代码优化的情况，其中通过应用反馈可以提高代码的效率。
+
+![image-20250305151514621](./asset/Self-Refine3.png)
+
+
+
+##### A2. CRITIC: Large Language Models Can Self-Correct with Tool-Interactive Critiquing
+
+清华、微软亚研院联合发布 https://arxiv.org/abs/2305.11738
+
+允许LLMs通过与外部工具的交互来验证和改进自己的输出，类似人类与工具的互动。CRITIC通过与搜索引擎、代码解释器等工具的交互，评估初始输出的某些方面，并根据验证过程中获得的反馈来修正输出。 该过程可以重复进行，以确保持续的输出改进。
+
+![image-20250305152756908](./asset/CRITIC1.png)
+
+图一注：框架包括两个步骤：（1） 通过与外部工具交互来生成评论来验证输出，以及 （2） 根据收到的评论纠正输出。我们可以迭代这种先验证后纠正的过程，以实现持续改进。
+
+![image-20250305153014487](./asset/CRITIC2.png)
+
+
+
+##### A3. Reflexion: Language Agents with Verbal Reinforcement Learning
+
+[2303.11366](https://arxiv.org/pdf/2303.11366)
+
+作者指出最近的一些工作诸如[ReAct](https://zhida.zhihu.com/search?content_id=243405184&content_type=Article&match_order=1&q=ReAct&zhida_source=entity)、[SayCan](https://zhida.zhihu.com/search?content_id=243405184&content_type=Article&match_order=1&q=SayCan&zhida_source=entity)、[Toolformer](https://zhida.zhihu.com/search?content_id=243405184&content_type=Article&match_order=1&q=Toolformer&zhida_source=entity)、[HuggingGPT](https://zhida.zhihu.com/search?content_id=243405184&content_type=Article&match_order=1&q=HuggingGPT&zhida_source=entity)以及[WebGPT](https://zhida.zhihu.com/search?content_id=243405184&content_type=Article&match_order=1&q=WebGPT&zhida_source=entity)证明了使用基于LLM构建的自动化决策Agent是可行的，但是这些方法大多依赖于在当前情景中的例子(in-context example)来指导LLM生成内容，因为用梯度下降的强化学习需要很多计算和时间。简单说，就是他们依赖的只是短期记忆。
+
+所以作者提出一种新的叫做Reflexion的框架，它通过使用语言强化学习（verb reinforcement）来帮助Agent从之前的失败中学习。Reflexion会把环境的二进制或量化的反馈转换成文字描述，作为下次迭代中的额外信息。这种自我反思式的反馈就像是个语意上的梯度信号来提供给Agent具体的优化方向，让Agent知道怎样改正错误，这样就能更好地完成任务了。
+
+![image-20250305154754765](./asset/Reflexion1.png)
+
+图一注：（a） 反思流程图。（b） 反思强化算法
+
+
+
+#### 2.1.3-B 规划Planning 工作流
+
+##### B1. Chain-of-Thought Prompting Elicits Reasoning in Large Language Models
+
+谷歌Brain Research https://arxiv.org/abs/2201.11903
+
+主要探讨通过CoT来引导LLM进行推理。
+
+
+
+
+
+
+
+##### B2. HuggingGPT: Solving AI Tasks with ChatGPT and its Friends in Hugging Face
+
+浙大，微软亚研院合作研究 https://arxiv.org/abs/2303.17580
+
+
+
+
+
+
+
+##### B3. UnderstandingtheplanningofLLMagents:Asurve
+
+中科大，华为合作研究 https://arxiv.org/abs/2402.02716
 
 
 
@@ -702,7 +790,21 @@ Overal preformance 整体性能评估。衡量系统实现核心目标的有效�
 
 
 
-### 2.2 多智能体协作框架 Muti-Agent System
+
+
+
+
+
+
+
+
+
+
+
+
+## 2.2 多智能体协作框架 Muti-Agent System
+
+多Agent协作工作流
 
 参考：[大模型多Agent协同工作：核心机制与交互流程 - 知乎](https://zhuanlan.zhihu.com/p/706511798)
 
