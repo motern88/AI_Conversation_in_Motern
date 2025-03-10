@@ -1280,7 +1280,7 @@ LLM 在通过 CoT 提示等机制时，强调冗长、循序渐进的推理。 �
 
   - Route
 
-    当前Step信息会交由Route模块进行分发。如果不需要使用工具完成当前Step，则转发给LLM生成器；如果需要使用工具，则转发给工具模块。
+    当前Step信息会包含是否使用工具的属性，交由Route模块进行分发。如果不需要使用工具完成当前Step，则转发给LLM生成器；如果需要使用工具，则路由模块内调用一个将任务参数提取为命令的LLM，将命令转发给工具模块。
 
   - Use Tools
 
@@ -1292,7 +1292,9 @@ LLM 在通过 CoT 提示等机制时，强调冗长、循序渐进的推理。 �
 
   - Reflection（inside Excute）
 
-    Excute内部的Reflection反思模块用于审查来自工具的返回结果或LLM直接回复的文本结果是否能够满足当前Step的需求。如果能满足，则总结为step的最终输出；如果无法满足，则将改进方法的指导交由路由模块重新进行工具调用或生成。
+    Excute内部的Reflection反思模块用于审查来自工具的返回结果或LLM直接回复的文本结果是否能够满足当前Step的需求。如果能满足，则总结为step的最终输出；如果无法满足，则将改进方法的指导交由路由模块重新进行工具调用或生成（包括调用工具进行验证）。
+
+    Excute内部的Reflection可以带一个评估器和一个反思器（参考Reflexion一文），当前步的执行结果会由评估器决定是否进行反思。如果需要反思，则反思器获取评估结果、执行结果和长期反思记忆。反思器生成反思结果，并将反思结果存在长期反思记忆中，将当前反思结果交给执行器执行
 
   - Sync State（inside Excute）
 
@@ -1305,6 +1307,64 @@ LLM 在通过 CoT 提示等机制时，强调冗长、循序渐进的推理。 �
 - Sync State（after Excute）
 
   当所有step执行完毕并且通过Reflection反思模块的审查后，汇总每个Step的状态，生成关于任务Task的状态。Task state包括需要最终返回的任务的输出（由最后一步Reflection总结）、一定的日志信息和Task的任务状态标记。并将生成的Task state同步到日志/消息池（如有）/长期记忆缓存（如有）中。
+
+
+
+##### Z1. 工作流v2
+
+我们基于v1改进为v2，明晰了一些不清晰的模块。
+
+![单Agent流程v2](./asset/单Agent流程v2.jpg)
+
+- Planning
+
+  Task进来后会被由LLM驱动的Planning模块规划多个Step。规划器应当避免生成不必要而重复的Step，这由规划器的收敛性决定。同时需要保证在此之中的**每个Step只做一件单一的事情**，例如“调用一次API”、“由LLM总结上一个Step调用API返回的结果”、“生成一段话”等
+
+- Reflection（after Planning）
+
+  紧接Planning后的Reflection反思模块用于审查规划结果。如果规划无误需保证规划step的格式能够被Excute正确执行；如果需要修改则指导Planning模块进行修改。反思模块可以由LLM驱动也可以由人类驱动。
+
+- Excute
+
+  执行模块用于执行每一个Step，执行模块内部按照一定的工作流运行：
+
+  - Action
+
+    由LLM驱动完成Step中的可能存在的多个操作，例如生成多个文本或在需要调用工具时生成调用指令。当被调用工具完成响应时，Action模块的LLM接收响应并自动执行下一个操作。
+
+  - Use Tools / LLM Generation
+
+    工具模块：包含计算器，搜索引擎，代码编译器，外部数据库与其他应用API。工具模块会将执行结果交给Reflection反思模块
+
+    LLM生成器：用于直接文本回答。
+
+  - Evaluation
+
+    用来评估Action的工具调用决策和调用参数提取是否正确，或用来分析Action是否真正完成当前step。如果无法满足则进入Reflection模块。
+
+  - Reflection（inside Excute）
+
+    反思模块获取上一步Evaluation结果、Action执行结果和长期反思记忆。反思模块会生成修正意见，并将修正意见存在长期反思记忆中，将当前最新修正意见交给执行器执行
+
+  - Sync State（inside Excute）
+
+    如果当前Step执行完毕且通过反思模块的验收，则生成当前step的状态信息（需要传出Excute模块的结果，一定的日志信息和当前step的状态标记）。将生成的Step状态同步到日志/消息池（如有）中。
+
+- Reflection（after Excute）
+
+  当所有Step的状态信息都已同步，则执行Reflection反思模块来审查所有Step的结果。如果无误则总结成最终输出并进入下一流程，如果有误则附带指导意见重新运行某些Step的Excute执行过程。
+
+- Sync State（after Excute）
+
+  当所有step执行完毕并且通过Reflection反思模块的审查后，汇总每个Step的状态，生成关于任务Task的状态。Task state包括需要最终返回的任务的输出（由最后一步Reflection总结）、一定的日志信息和Task的任务状态标记。并将生成的Task state同步到日志/消息池（如有）/长期记忆缓存（如有）中。
+
+
+
+
+
+
+
+
 
 
 
