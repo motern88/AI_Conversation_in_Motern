@@ -1268,7 +1268,7 @@ LLM 在通过 CoT 提示等机制时，强调冗长、循序渐进的推理。 �
 
 - Planning
 
-  Task进来后会被由LLM驱动的Planning模块规划多个Step。规划器应当避免生成不必要而重复的Step，这由规划器的收敛性决定。同时需要保证在此之中的**每个Step只做一件单一的事情**，例如“调用一次API”、“由LLM总结上一个Step调用API返回的结果”、“生成一段话”等
+  Task进来后会被由LLM驱动的Planning模块规划多个Step。规划器应当避免生成不必要而重复的Step，这由规划器的收敛性决定。同时需要保证在此之中的**一个Step只做一件单一的事情**，例如“调用一次API”、“由LLM总结上一个Step调用API返回的结果”、“生成一段话”等
 
 - Reflection（after Planning）
 
@@ -1318,7 +1318,7 @@ LLM 在通过 CoT 提示等机制时，强调冗长、循序渐进的推理。 �
 
 - Planning
 
-  Task进来后会被由LLM驱动的Planning模块规划多个Step。规划器应当避免生成不必要而重复的Step，这由规划器的收敛性决定。同时需要保证在此之中的**每个Step只做一件单一的事情**，例如“调用一次API”、“由LLM总结上一个Step调用API返回的结果”、“生成一段话”等
+  Task进来后会被由LLM驱动的Planning模块规划多个Step。规划器应当避免生成不必要而重复的Step，这由规划器的收敛性决定。同时需要保证在此之中的**一个Step只做一件单一的事情**，例如“调用一次API”、“由LLM总结上一个Step调用API返回的结果”、“生成一段话”等
 
 - Reflection（after Planning）
 
@@ -1332,11 +1332,9 @@ LLM 在通过 CoT 提示等机制时，强调冗长、循序渐进的推理。 �
 
     由LLM驱动完成Step中的可能存在的多个操作，例如生成多个文本或在需要调用工具时生成调用指令。当被调用工具完成响应时，Action模块的LLM接收响应并自动执行下一个操作。
 
-  - Use Tools / LLM Generation
+  - Use Tools 
 
-    工具模块：包含计算器，搜索引擎，代码编译器，外部数据库与其他应用API。工具模块会将执行结果交给Reflection反思模块
-
-    LLM生成器：用于直接文本回答。
+    包含计算器，搜索引擎，代码编译器，外部数据库与其他应用API。工具模块会将执行结果交给Reflection反思模块
 
   - Evaluation
 
