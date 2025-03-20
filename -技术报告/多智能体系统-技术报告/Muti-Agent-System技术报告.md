@@ -1360,11 +1360,50 @@ LLM 在通过 CoT 提示等机制时，强调冗长、循序渐进的推理。 �
 
 ##### Z3. 工作流v3
 
-根据MetaGPT的流程，将固定Action部分优化
+根据MetaGPT的流程，将固定Action部分优化。其中有一些重要的能力需要实现。
+
+1. Agent能够决定使用什么工具与技能
+2. Agent能够决定自身工作逻辑
 
 ![单Agent流程v3](./asset/单Agent流程v3.jpg)
 
+一个任务 `task` 会由管理Agent/人类分为多个阶段 `stage` 依次执行，每个 `stage` 由一个或多个Agent并行执行。在Agent拿到自己需要完成的 `stage` 时，Agent内部将会以上图逻辑进行执行。
 
+我们将 `Action` 定义为工具 `Tools` 或技能 `Skills` 的一次使用。每个 `step` 的具体执行为一个 `Action` （这里`Action` 在MetaGPT中则多个具体步骤的执行，需要预设不同种类的 `Action` ）
+
+
+
+- Think
+
+  Agent接到一个任务阶段后首先解析该阶段目标并进行一次思考，Think模块内部使用一次快速思考 `Quick Think` 来判断这是一个简单的需求——直接通过一个步骤即可完成，还是一个复杂的需求——需要调用规划 `Planning` 能力规划一个中长期的步骤列表。
+
+  每个需要执行的 `step` 会被初始化为一个 `step state` 。
+
+- Action
+
+  执行过程会根据接收到当前 `step` 的要求与从 `step state` 中获取到的具体指令 ，由路由分发给具体的技能或工具。
+
+  在得到执行结果反馈后，会进行 `step state` 的更新与同步。
+
+- Skills
+
+  技能的定义是所有由LLM驱动的具体衍生能力。其主要区别在于提示词的不同，且是随提示词的改变而具备的特定衍生能力。
+
+  技能库包括包括规划 `Planning`、反思 `Reflection`、总结 `Summary` 、快速思考 `Quick Think` 、指令生成 `Instruction Generation` 等 。
+
+- Tools
+
+  工具的定义是LLM本身所不具备的能力，而通过访问Agent外部模块接口实现的一系列功能。相比于技能，工具更接近现实世界的交互行为，能够获取或改变Agent系统外的事物。
+
+  工具库包括向量数据库检索增强生成 `RAG`、搜索引擎 `Search Engine`、光学字符识别 `OCR` 等。
+
+
+
+以上所有的模块行动间的信息传递，均分为两种：消息传递 `Message` 和状态传递 `State` 。
+
+**消息传递**用于Agent内模块间沟通、技能使用与工具使用，也用于Agent间的对话和通信。
+
+**状态传递**用于任务分级与追踪，在任务层面的 `Task State`、`Stage State` 能有效记录任务实时状态且能在Agent间保持全局（`Task State`）与局部（`Stage State`）的信息同步，在Agent内部的 `Step State` 则能约束和规范Agent执行流程，是Agent自我观察的信息来源之一。
 
 
 
