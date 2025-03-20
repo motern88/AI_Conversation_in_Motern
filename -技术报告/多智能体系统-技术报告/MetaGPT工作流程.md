@@ -898,15 +898,172 @@ while self.planner.current_task:
 
 
 
-### 1.5 定义动作
+### 1.5 定义动作 Action
 
-MetaGPT中Agent可以选择的最小动作单元是Action。Action是动作的逻辑抽象，一般是由提示词封装、LLM输出、最后操作组合而成。例如
+MetaGPT中Agent可以选择的最小动作单元是`Action`。`Action`是动作的逻辑抽象，一般是由提示词封装、LLM输出、最后操作组合而成。例如
 
 ```python
+from metagpt.actions import Action
 
+class SimpleWriteCode(Action):
+    PROMPT_TEMPLATE: str = """
+    Write a python function that can {instruction} and provide two runnnable test cases.
+    Return ```python your_code_here ``` with NO other texts,
+    your code:
+    """
+
+    name: str = "SimpleWriteCode"
+
+    async def run(self, instruction: str):
+        prompt = self.PROMPT_TEMPLATE.format(instruction=instruction)
+
+        rsp = await self._aask(prompt)
+
+        code_text = SimpleWriteCode.parse_code(rsp)
+
+        return code_text
+
+    @staticmethod
+    def parse_code(rsp):
+        pattern = r"```python(.*)```"
+        match = re.search(pattern, rsp, re.DOTALL)
+        code_text = match.group(1) if match else rsp
+        return code_text
 ```
 
+其中run部分组合了提示词，LLM调用，与代码工具使用。
+
+### 1.6 定义角色 Role
+
+在 MetaGPT 中，`Role` 类是智能体的逻辑抽象。一个 `Role` 能执行特定的 `Action`，拥有记忆、思考并采用各种策略行动。基本上，它充当一个将所有这些组件联系在一起的凝聚实体。
+
+一个定义Role的示例是：
+
+1. 我们为其指定一个名称和配置文件。
+2. 我们使用 `self._init_action` 函数为其配备期望的动作 `SimpleWriteCode`。
+3. 我们覆盖 `_act` 函数，其中包含智能体具体行动逻辑。我们写入，我们的智能体将从最新的记忆中获取人类指令，运行配备的动作，MetaGPT将其作为待办事项 (`self.rc.todo`) 在幕后处理，最后返回一个完整的消息。
+
+如果一个角色具有多个可选`action`时，由`Role.run`来根据策略选择进行`action`的顺序
+
+![MetaGPT执行层级](./asset/MetaGPT执行层级.jpg)
 
 
-是否应当由Agent自己组装Action？还是预设好多套Action逻辑？
 
+
+
+## 2. 多智能体入门
+
+在多智能体场景中，定义角色需要做两件事：
+
+1. 使用 `set_actions` 为`Role`配备适当的 `Action`，这与设置单智能体相同
+2. 多智能体操作逻辑：我们使`Role` `_watch` 来自用户或其他智能体的重要上游消息。回想我们的SOP，`SimpleCoder`接收用户指令，这是由MetaGPT中的`UserRequirement`引起的`Message`。因此，我们添加了 `self._watch([UserRequirement])`。
+
+当定义好多个角色后，是时候将它们放在一起了。我们初始化所有角色，设置一个 `Team`，并`hire` 它们。运行 `Team`，我们应该会看到它们之间的协作！
+
+```python
+import fire
+import typer
+from metagpt.logs import logger
+from metagpt.team import Team
+app = typer.Typer()
+
+@app.command()
+def main(
+    idea: str = typer.Argument(..., help="write a function that calculates the product of a list"),
+    investment: float = typer.Option(default=3.0, help="Dollar amount to invest in the AI company."),
+    n_round: int = typer.Option(default=5, help="Number of rounds for the simulation."),
+):
+    logger.info(idea)
+
+    team = Team()
+    team.hire(
+        [
+            SimpleCoder(),
+            SimpleTester(),
+            SimpleReviewer(),
+        ]
+    )
+
+    team.invest(investment=investment)
+    team.run_project(idea)
+    await team.run(n_round=n_round)
+
+if __name__ == "__main__":
+    fire.Fire(main)
+```
+
+### 2.1 内部机制
+
+![image-20250320104525953](./asset/MetaGPT5.png)
+
+如图的右侧部分所示，`Role`将从`Environment`中`_observe` `Message`。如果有一个`Role` `_watch` 的特定 `Action` 引起的 `Message`，那么这是一个有效的观察，触发`Role`的后续思考和操作。
+
+在 `_think` 中，`Role`将选择其能力范围内的一个 `Action` 并将其设置为要做的事情。在 `_act` 中，`Role`执行要做的事情，即运行 `Action` 并获取输出。将输出封装在 `Message` 中，最终 `publish_message` 到 `Environment`，完成了一个完整的智能体运行。
+
+在每个步骤中，无论是 `_observe`、`_think` 还是 `_act`，`Role`都将与其 `Memory` 交互，通过添加或检索来实现。
+
+
+
+
+
+## 3. 使用记忆
+
+记忆是智能体的核心组件之一。智能体需要记忆来获取做出决策或执行动作所需的基本上下文，还需要记忆来学习技能或积累经验。
+
+在MetaGPT中，`Memory`类是智能体的记忆的抽象。当初始化时，`Role`初始化一个`Memory`对象作为`self.rc.memory`属性，它将在之后的`_observe`中存储每个`Message`，以便后续的检索。简而言之，`Role`的记忆是一个含有`Message`的列表。
+
+**检索记忆：**
+
+当需要获取记忆时（获取LLM输入的上下文），可以使用`self.get_memories`。函数定义如下：
+
+```python
+def get_memories(self, k=0) -> list[Message]:
+    """A wrapper to return the most recent k memories of this role, return all when k=0"""
+    return self.rc.memory.get(k=k)
+```
+
+使用记忆的完整片段如下：
+
+```python
+async def _act(self) -> Message:
+        logger.info(f"{self._setting}: ready to {self.rc.todo}")
+        todo = self.rc.todo
+
+        # context = self.get_memories(k=1)[0].content # use the most recent memory as context
+        context = self.get_memories() # use all memories as context
+
+        code_text = await todo.run(context, k=5) # specify arguments
+
+        msg = Message(content=code_text, role=self.profile, cause_by=todo)
+
+        return msg
+```
+
+**添加记忆:**
+
+可以使用`self.rc.memory.add(msg)`添加记忆，，其中`msg`必须是`Message`的实例。请查看上述的代码片段以获取示例用法。
+
+建议在定义`_act`逻辑时将`Message`的动作输出添加到`Role`的记忆中。通常，`Role`需要记住它先前说过或做过什么，以便采取下一步的行动。
+
+
+
+## 4. 人类介入
+
+最初，LLM扮演 `SimpleReviewer` 的角色。假设我们想对更好地控制审阅过程，我们可以亲自担任这个`Role`。这只需要一个开关：在初始化时设置 `is_human=True`。代码变为：
+
+```python
+team.hire(
+    [
+        SimpleCoder(),
+        SimpleTester(),
+        # SimpleReviewer(), # 原始行
+        SimpleReviewer(is_human=True), # 更改为这一行
+    ]
+)
+```
+
+我们作为人类充当 `SimpleReviewer`，现在与两个基于LLM的智能体 `SimpleCoder` 和 `SimpleTester` 进行交互。我们可以对`SimpleTester`写的单元测试进行评论，比如要求测试更多边界情况，让`SimpleTester`进行改写。这个切换对于原始的SOP和 `Role` 定义是完全不可见的（无影响）。
+
+每次轮到我们回应时，运行过程将暂停并等待我们的输入。只需输入我们想要输入的内容，然后就将消息发送给其他智能体了。
+
+MetaGPT的局限性是人类交互必须写死在代码中，以替代代码中的特定步骤，或作再次确认。然而一个更优的交互形式自然是作为Agent整体随时参与/退出动态工作流程中。
