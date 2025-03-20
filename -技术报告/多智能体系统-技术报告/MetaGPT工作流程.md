@@ -1,6 +1,6 @@
 ## 1. 智能体入门
 
-
+文档实例如下：[智能体入门 | MetaGPT](https://docs.deepwisdom.ai/main/zh/guide/tutorials/agent_101.html)
 
 ```python
 from metagpt.context import Context
@@ -21,20 +21,6 @@ async def main():
 其次实例化一个角色，ProductManager，并将 Context 对象传入
 
 最后使用实例化角色的 .run（） 方法运行msg
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 ### 1.1 Context 类
 
@@ -566,13 +552,361 @@ role_id: str = ""  # 角色ID
 
 
 
-### 1.3 
+### 1.3 Role.run（） 运行
+
+```python
+from metagpt.context import Context
+from metagpt.roles.product_manager import ProductManager
+
+async def main():
+    msg = "Write a PRD for a snake game"
+    context = Context()  # 显式创建会话Context对象，Role对象会隐式的自动将它共享给自己的Action对象
+    role = ProductManager(context=context)
+    while msg:
+        msg = await role.run(msg)
+```
+
+其中role.run：
+
+```python
+    @role_raise_decorator
+    async def run(self, with_message=None) -> Message | None:
+        """观察并根据观察结果进行思考和行动"""
+        if with_message:
+            msg = None
+            if isinstance(with_message, str):
+                msg = Message(content=with_message)
+            elif isinstance(with_message, Message):
+                msg = with_message
+            elif isinstance(with_message, list):
+                msg = Message(content="\n".join(with_message))
+            if not msg.cause_by:
+                msg.cause_by = UserRequirement
+            self.put_message(msg)
+        if not await self._observe():
+            # 如果没有新的信息，挂起并等待
+            logger.debug(f"{self._setting}: 没有新信息。等待中。")
+            return
+
+        rsp = await self.react()
+
+        # 重置下一个动作
+        self.set_todo(None)
+        # 将响应消息发布到环境对象，由环境将消息传递给订阅者。
+        self.publish_message(rsp)
+        return rsp
+```
+
+其中 `Message(BaseModel)` 用于表示一条对话消息（不包含全部上下文）
+
+> `id` (str): 消息的唯一标识符，默认自动生成。
+> `content` (str): 用户或代理的自然语言内容。
+> `instruct_content` (Optional[BaseModel]): 结构化的指令内容，可选。
+> `role` (str): 消息的角色，默认为 "user"（系统 / 用户 / 助手）。
+> `cause_by` (str): 触发消息的原因。
+> `sent_from` (str): 发送消息的来源。
+> `send_to` (set[str]): 发送目标，默认为全体广播。
+> `metadata` (Dict[str, Any]): 存储 `content` 和 `instruct_content` 相关的元数据。
+
+其中`rsp = await self.react()`用于产生回复响应，`react()`：
+
+```python
+    async def react(self) -> Message:
+        """进入三种策略之一，角色根据观察到的消息做出反应"""
+        if self.rc.react_mode == RoleReactMode.REACT or self.rc.react_mode == RoleReactMode.BY_ORDER:
+            rsp = await self._react()
+        elif self.rc.react_mode == RoleReactMode.PLAN_AND_ACT:
+            rsp = await self._plan_and_act()
+        else:
+            raise ValueError(f"不支持的反应模式: {self.rc.react_mode}")
+        self._set_state(state=-1)  # 当前反应完成，重置状态为 -1 并将待办任务设为 None
+        if isinstance(rsp, AIMessage):
+            rsp.with_agent(self._setting)
+        return rsp
+```
+
+Agent在反应这一步会根据预先设置好的模式选择 `_react()` 或 `_plan_and_act()` 进行进一步处理。
+
+#### 1.3.1 _react()
+
+```python
+    async def _react(self) -> Message:
+        """先思考，然后执行动作，直到角色认为不再需要进一步的任务为止。
+        这是 ReAct 论文中的标准思考-行动循环，在任务求解中交替进行思考和行动，即 _think -> _act -> _think -> _act -> ...
+        使用 llm 动态选择动作
+        """
+        actions_taken = 0
+        rsp = AIMessage(content="No actions taken yet", cause_by=Action)  # 初始内容将会在角色 _act 后被覆盖
+        while actions_taken < self.rc.max_react_loop:
+            # 思考
+            has_todo = await self._think()
+            if not has_todo:
+                break
+            # 执行
+            logger.debug(f"{self._setting}: {self.rc.state=}, 将执行 {self.rc.todo}")
+            rsp = await self._act()
+            actions_taken += 1
+        return rsp  # 返回最后一次行动的结果
+```
+
+先思考 `_think()` 后执行 `_act()` 
+
+- `_react()` 其中 `_think()` ：
+
+```python
+    async def _think(self) -> bool:
+        """考虑接下来该做什么，并决定下一步的行动。如果无法执行任何操作，返回 False"""
+        ...
+        # 构造 Prompt
+        prompt = self._get_prefix()
+        # 格式化 Prompt
+        prompt += STATE_TEMPLATE.format(
+            history=self.rc.history,
+            states="\n".join(self.states),
+            n_states=len(self.states) - 1,
+            previous_state=self.rc.state,
+        )
+		# 调用 LLM 生成下一步
+        next_state = await self.llm.aask(prompt)
+        # 解析 LLM 返回值
+        next_state = extract_state_value_from_output(next_state)
+        ...
+        self._set_state(next_state)
+        return True
+```
+
+- `_react()` 其中 `_act()` ：
+
+```python
+    async def _act(self) -> Message:
+        ...
+        # 执行任务
+        response = await self.rc.todo.run(self.rc.history)
+        # 解析response
+        if isinstance(response, (ActionOutput, ActionNode)):
+            msg = AIMessage(
+                content=response.content,
+                instruct_content=response.instruct_content,
+                cause_by=self.rc.todo,
+                sent_from=self,
+            )
+        elif isinstance(response, Message):
+            msg = response
+        else:
+            msg = AIMessage(content=response or "", cause_by=self.rc.todo, sent_from=self)
+        # 存入记忆
+        self.rc.memory.add(msg)
+
+        return msg
+```
+
+------
+
+以上涉及关键方法： `llm.aask()` 和 `rc.todo.run()`
+
+`self.llm` 于 `ContextMixin` 定义：
+
+```python
+from metagpt.provider.base_llm import BaseLLM
+class ContextMixin(BaseModel):
+	private_llm: Optional[BaseLLM] = Field(default=None, exclude=True)
+    ...
+	@property
+    def llm(self) -> BaseLLM:
+        """获取角色 LLM：如果不存在，则从角色配置初始化"""
+        if not self.private_llm:
+            self.private_llm = self.context.llm_with_cost_manager_from_llm_config(self.config.llm)
+        return self.private_llm
+
+    @llm.setter
+    def llm(self, llm: BaseLLM) -> None:
+        """设置角色 LLM"""
+        self.private_llm = llm
+```
+
+其中 `provider.base_llm.BaseLLM` 中定义了 `aask` 方法
+
+```python
+    async def aask(
+        self,
+        msg: Union[str, list[dict[str, str]]],
+        system_msgs: Optional[list[str]] = None,
+        format_msgs: Optional[list[dict[str, str]]] = None,
+        images: Optional[Union[str, list[str]]] = None,
+        timeout=USE_CONFIG_TIMEOUT,
+        stream=None,
+    ) -> str:
+        # 如果有系统消息，调用 _system_msgs 方法生成系统消息
+        if system_msgs:
+            message = self._system_msgs(system_msgs)
+        else:
+            message = [self._default_system_msg()]  # 默认的系统消息
+        # 如果不使用系统提示，则清空 message 列表
+        if not self.use_system_prompt:
+            message = []
+        # 如果有格式化消息，扩展到 message 中
+        if format_msgs:
+            message.extend(format_msgs)
+        # 根据 msg 的类型决定如何处理
+        if isinstance(msg, str):
+            message.append(self._user_msg(msg, images=images))  # 添加用户消息
+        else:
+            message.extend(msg)  # 如果 msg 是列表，则直接扩展到 message 中
+        ...
+
+        # 压缩消息
+        compressed_message = self.compress_messages(message, compress_type=self.config.compress_type)
+        # 调用异步方法获取回答
+        rsp = await self.acompletion_text(compressed_message, stream=stream, timeout=self.get_timeout(timeout))
+        return rsp
+```
+
+
+
+`rc.todo.run()` 为 `RoleContext.todo.run()` 也就是 `Action.run()`
+
+`metagpt.actions.action.Action.run()` 中：
+
+```python
+    async def run(self, *args, **kwargs):
+        """运行动作"""
+        if self.node:
+            return await self._run_action_node(*args, **kwargs)  # 如果有节点，运行节点
+        
+    async def _run_action_node(self, *args, **kwargs):
+        """运行动作节点"""
+        msgs = args[0]
+        context = "## 历史消息\n"
+        context += "\n".join([f"{idx}: {i}" for idx, i in enumerate(reversed(msgs))])  # 创建历史消息上下文
+        return await self.node.fill(req=context, llm=self.llm)  # 填充节点并返回
+```
+
+
+
+#### 1.3.2 _plan_and_act()
+
+```python
+    async def _plan_and_act(self) -> Message:
+        """先规划，然后执行一系列动作，即 _think（规划） -> _act -> _act -> ... 使用 llm 动态制定计划"""
+        if not self.planner.plan.goal:
+            # 创建初始计划并更新，直到确认目标
+            goal = self.rc.memory.get()[-1].content  # 获取最新的用户需求
+            await self.planner.update_plan(goal=goal)
+
+        # 执行任务，直到所有任务完成
+        while self.planner.current_task:
+            task = self.planner.current_task
+            logger.info(f"准备执行任务 {task}")
+
+            # 执行当前任务
+            task_result = await self._act_on_task(task)
+
+            # 处理任务结果，例如审核、确认、更新计划
+            await self.planner.process_task_result(task_result)
+
+        rsp = self.planner.get_useful_memories()[0]  # 返回完成的计划作为响应
+        rsp.role = "assistant"
+        rsp.sent_from = self._setting
+
+        self.rc.memory.add(rsp)  # 将响应添加到持久化内存中
+
+        return rsp
+```
+
+先思考创建任务 `planner.update_plan(goal=goal)`
+
+随后执行任务 `_act_on_task(task)`
+
+```python
+while self.planner.current_task:
+    task = self.planner.current_task
+    task_result = await self._act_on_task(task)
+```
+
+
+
+其中 `_act_on_task()`，在Role类中未实现，需要在子类中实现（"处理计划中的任务执行"功能）
+
+其中 `planer` 于 `metagpt.strategy.planner.Planner` 中实现。用于管理任务的规划、执行、更新和确认。该类的核心功能包括：
+
+初始化 (`__init__`)
+
+- `goal`: 任务目标
+- `plan`: 任务计划对象，若未提供，则会根据目标创建一个新的 `Plan`
+- `working_memory`: 存储当前任务的信息，任务完成后会清除
+- `auto_run`: 是否自动运行
+
+任务相关的属性
+
+- `current_task`: 获取当前任务
+- `current_task_id`: 获取当前任务的 ID
+
+更新任务计划 (`update_plan`)
+
+- 根据新的目标 (`goal`) 重新生成任务计划
+- 通过 `WritePlan().run(context, max_tasks=max_tasks)` 生成新任务
+- 对生成的计划进行 `precheck_update_plan_from_rsp` 预检查，确保其合理性
+- 通过 `ask_review()` 让用户确认计划
+- 计划确认后调用 `update_plan_from_rsp()` 更新 `plan`
+
+处理任务执行结果 (`process_task_result`)
+
+- 任务完成后请求用户确认
+- 若确认成功，则调用 `confirm_task()` 记录任务进展
+- 若用户要求重做，则跳过确认
+- 若用户修改任务，则调用 `update_plan()` 更新计划
+
+请求任务审查 (`ask_review`)
+
+- 触发 `AskReview().run()` 获取用户审查结果
+- 若用户未确认，则记录审查意见
+- 若 `auto_run=True`，则默认任务执行成功
+
+确认任务 (`confirm_task`)
+
+- 更新任务结果 (`update_task_result`)
+- 标记当前任务完成 (`finish_current_task`)
+- 清除 `working_memory`
+- 若用户确认任务但要求调整下游任务，则调用 `update_plan()`
+
+获取有用的记忆 (`get_useful_memories`)
+
+- 返回当前任务的上下文信息，包括：
+  - 目标 (`goal`)
+  - 计划的整体上下文 (`context`)
+  - 任务列表 (`tasks`)
+  - 当前任务 (`current_task`)
+
+获取计划状态 (`get_plan_status`)
+
+- 整合当前任务信息，包括：
+  - 已完成的任务代码 (`code_written`)
+  - 任务执行结果 (`task_results`)
+  - 当前任务的说明 (`current_task.instruction`)
+  - 指导信息 (`guidance`)
 
 
 
 
 
-### 1.x 一个Agent运行周期流程
+
+
+### 1.4 一个Agent运行周期流程
 
 
 <img src="./asset/MetaGPT4.png" alt="image-20250318094851252" style="zoom: 67%;" />
+
+
+
+### 1.5 定义动作
+
+MetaGPT中Agent可以选择的最小动作单元是Action。Action是动作的逻辑抽象，一般是由提示词封装、LLM输出、最后操作组合而成。例如
+
+```python
+
+```
+
+
+
+是否应当由Agent自己组装Action？还是预设好多套Action逻辑？
+
