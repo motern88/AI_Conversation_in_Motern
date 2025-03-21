@@ -597,7 +597,9 @@ async def main():
         return rsp
 ```
 
-其中 `Message(BaseModel)` 用于表示一条对话消息（不包含全部上下文）
+其中 `Message(BaseModel)` 于 `metagpt.schema.Message` 
+
+中定义，用于表示一条对话消息（不包含全部上下文）
 
 > `id` (str): 消息的唯一标识符，默认自动生成。
 > `content` (str): 用户或代理的自然语言内容。
@@ -933,6 +935,8 @@ class SimpleWriteCode(Action):
 
 其中run部分组合了提示词，LLM调用，与代码工具使用。
 
+
+
 ### 1.6 定义角色 Role
 
 在 MetaGPT 中，`Role` 类是智能体的逻辑抽象。一个 `Role` 能执行特定的 `Action`，拥有记忆、思考并采用各种策略行动。基本上，它充当一个将所有这些组件联系在一起的凝聚实体。
@@ -946,6 +950,52 @@ class SimpleWriteCode(Action):
 如果一个角色具有多个可选`action`时，由`Role.run`来根据策略选择进行`action`的顺序
 
 ![MetaGPT执行层级](./asset/MetaGPT执行层级.jpg)
+
+
+
+### 1.7 执行 Action
+
+一个示例是，在 `Role.act` 中：
+
+```python
+    async def act(self) -> ActionOutput:
+        """
+        导出 SDK API，供 AgentStore RPC 使用。
+        导出的 `act` 函数
+        """
+        msg = await self._act()
+        return ActionOutput(content=msg.content, instruct_content=msg.instruct_content)
+```
+
+**由 `_act()` 中执行了具体Action操作**，并生成由 `Message` 承载的Action返回信息，由 `ActionOutput` 来封装具体Action最终的返回信息
+
+其中 `_act()` :
+
+```python
+response = await self.rc.todo.run(self.rc.history)
+```
+
+这里实际上执行的是 `Action.run` 。 `Action.run` 的实际功能于Action子类中实现，也就是具体组合的不同Action内部会执行不同的多步操作。不同的 `Role` 这里执行的也是不同的 `Role` 自己的 `Action.run` 。
+
+
+
+其中 `ActionOutput` ：
+
+```python
+class ActionOutput:
+    content: str  # 输出的内容，类型为字符串
+    instruct_content: BaseModel  # 指令内容，类型为 Pydantic 的 BaseModel 类
+
+    def __init__(self, content: str, instruct_content: BaseModel):
+        """
+        初始化 ActionOutput 类的实例
+        :param content: 输出的文本内容
+        :param instruct_content: 需要传递的指令内容，类型为 BaseModel 的实例
+        """
+        self.content = content  # 设置 content 属性
+        self.instruct_content = instruct_content  # 设置 instruct_content 属性
+
+```
 
 
 
