@@ -1399,11 +1399,26 @@ LLM 在通过 CoT 提示等机制时，强调冗长、循序渐进的推理。 �
 
 
 
+##### Z10. 信息传递
+
 以上所有的模块行动间的信息传递，均分为两种：消息传递 `Message` 和状态传递 `State` 。
 
 **消息传递**用于Agent内模块间沟通、技能使用与工具使用，也用于Agent间的对话和通信。
 
 **状态传递**用于任务分级与追踪，在任务层面的 `Task State`、`Stage State` 能有效记录任务实时状态且能在Agent间保持全局（`Task State`）与局部（`Stage State`）的信息同步，在Agent内部的 `Step State` 则能约束和规范Agent执行流程，是Agent自我观察的信息来源之一。
+
+
+
+ `Task State` 和 `Stage State` 是相互指向的，但是 `Stage State` 是不指向具体 `Step State` 的，只指向负责执行的 Agent，因为 `Step State` 是由 Agent 内部产生的，只被记录在 `Agent State` 里。同时，`Step State` 会指向 `Stage State` 用于标明自己属于哪一个任务，因为一个Agent可能被分配多个不同任务的 Stage 。
+
+状态空间如下图所示，包含（`Task State`，`Stage State`，`Agent State`，`Step State`）：
+
+![多智能体状态空间示意图](./asset/多智能体状态空间示意图.jpg)
+
+Agent之间通信的行为也是作为一个Step来执行，发起者Agent在一个Step中向其他Agent发起对话，其他Agent的Step列表中会被插入一个回应Step（如果接收者Agent当前有正在执行的Step，则插入位置于当前正在执行的Step下一位）。
+
+
+
 
 
 
@@ -1519,11 +1534,11 @@ Agent间通过通信共享信息，支持任务协同执行。
 
 **协作通信**
 
-当前任务涉及的所有Agent被拉入初始化后的任务群组Task Group中进行协作通信，共享当前任务群组中消息池，
+当前任务涉及的所有Agent被拉入初始化后的任务群组Task Group中进行协作通信，共享当前任务群组中消息池（共享指的是每个Agent都有权限查看，且仅维护一份Task Group的公共消息池，但并非其中每个消息都会通知每个Agent）。
 
 主动获取：信息可以通过API与其他非当前群组中的Agent或人类发起对话，或通过API查看任务群组中所有历史消息。
 
-被动获取：订阅机制定向接收来自消息池中的特定消息。
+被动获取：Agent受到其他Agent的主动对话请求。
 
 
 
@@ -1557,21 +1572,85 @@ Agent间通过通信共享信息，支持任务协同执行。
 
 ##### A 状态信息
 
-首先我们需要实现两个状态空间，一个是Task state以任务视角记录任务信息，一个是Agent state以Agent视角记录Agent自己的信息。
+首先我们需要实现两种状态空间，一个是以任务视角为主的状态空间，记录任务信息。一个是以Agent视角的状态空间，记录Agent自己的信息。
 
-`task_state` 任务状态：
+- `task_state` 任务状态（大量信息）：
 
 任务状态由Agent/人类初始化，由Agent/人类进行更新。包含任务名称、任务目标、具体步骤、完成情况等，同时也记录了任务群组中参与Agent的情况，以及任务群组中共享消息池的信息。
 
-`agent_state` 智能体状态：
+- `stage_state` 任务阶段状态（简单少量信息）：
+
+任务阶段状态有任务群组中首个Agent负责规划，并初始化需要完成这个任务的多个阶段的任务阶段状态。
+
+**同一时刻，Task Group中仅有一个Stage活跃**，因此不需要在阶段状态中维护任何共享消息池，阶段状态只记录阶段目标，完成情况和Agent信息
+
+- `agent_state` 智能体状态（大量信息）：
 
 Agent状态随着Agent的实例化而初始化（由其他Agent/人类初始化），由Agent自己/其他Agent/人类进行更新。包含Agent的个人信息，使用工具与技能的权限，以及LLM上下文的缓存。
+
+- `step_state` 任务步骤状态（简单少量信息）：
+
+记录Agent中每一个最小动作的执行情况。仅记录当前步骤进行的具体操作，所属的任务阶段与所属的Agent。
+
+Agent顺序执行步骤列表中待办步骤，**同一时刻，Agent中只有一个Step被执行**。
+
+------
+
+ `Task State` 和 `Stage State` 是相互指向的，但是 `Stage State` 是不指向具体 `Step State` 的，只指向负责执行的 Agent，因为 `Step State` 是由 Agent 内部产生的，只被记录在 `Agent State` 里。同时，`Step State` 会指向 `Stage State` 用于标明自己属于哪一个任务，因为一个Agent可能被分配多个不同任务的 Stage 。
+
+
+
+状态空间如下图所示，包含（`Task State`，`Stage State`，`Agent State`，`Step State`）：
+
+![多智能体状态空间示意图](./asset/多智能体状态空间示意图.jpg)
+
+Task中有多个Stage，Stage中有多个Agent相互协作，Agent内部顺序执行多个Step操作。一些Step的作用是Agent与Agent之间的通信（图中红色箭头）。
+
+
+
+
+
+任务/阶段/Agent/步骤 的执行顺序（Task中激活Stage的情况，与Stage中激活Agent的情况）：
+
+![MAS任务执行顺序](./asset/MAS任务执行顺序.gif)
+
+此时，一个`Task`进来会依次执行多个`Stage`。在每个`Stage`中，不同`Agent`被激活协作。
+
+在一些的复杂场景下，同时存在多个任务`Task`
+
+
+
+
+
+
 
 
 
 ##### B 动态Agent类
 
-Agent在实例化时由外部配置决定Agent的工具库和技能库，其中工具库指使用外部工具，技能库指的是规划、反思、决策的能力
+Agent在实例化时由外部配置决定Agent的工具库和技能库，其中工具库指使用外部工具，技能库指的是规划、反思、决策的能力。
+
+所有Agent使用相同的类，具有相同的方法属性，相同的代码构造。不同Agent的区别仅有 `Agent State` 的不同，可以通过 `Agent State` 还原出一样的Agent 。
+
+
+
+
+
+##### C 协作通信
+
+- Task Group共享消息池：
+
+  `task_state` 中会维护一份共享消息池，用于记录任务的全局信息，包括任务管理Agent对任务流程的更新与追加操作，任务群组成员对任务不同阶段Stage的完成情况更新等。
+
+  共享消息池中的信息所有Agent都可以访问，然而共享消息池中的信息并不会主动发送给每个Agent，Agent并不被动接收共享消息池，Agent只会在需要的时候主动查看
+
+  （同一时刻，Task Group中仅有一个Stage活跃，因此不需要在 `stage state` 中维护任务阶段的共享消息池，`stage state` 只记录阶段目标和完成情况）
+
+- Agent间通信：
+
+  Agent间通信需要由一方主动发起（在发起方的某一个step中执行的是 `send message` 工具，接收方Agent的`step`列表中会被追加一个回应step，用于在回应step中回复这条message）
+
+
 
 
 

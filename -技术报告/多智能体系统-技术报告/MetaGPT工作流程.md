@@ -1067,3 +1067,156 @@ team.hire(
 每次轮到我们回应时，运行过程将暂停并等待我们的输入。只需输入我们想要输入的内容，然后就将消息发送给其他智能体了。
 
 MetaGPT的局限性是人类交互必须写死在代码中，以替代代码中的特定步骤，或作再次确认。然而一个更优的交互形式自然是作为Agent整体随时参与/退出动态工作流程中。
+
+
+
+## 5. Agent间通信
+
+智能体之间的消息交换是通过Message中提供标签的属性，以及`Environment`提供的`publish_message`能力来实现的。
+
+- 智能体作为消息的发送者，只需提供消息的来源信息即可。消息的来源对应`Message`的`sent_from`、`cause_by`。
+
+- 智能体作为消息的使用者，需要订阅相应的消息。消息的订阅标签对应`Message`的`cause_by`。
+
+- Environment对象负责将消息按各个智能体的订阅需求，广播给各个智能体。
+
+
+
+在规划智能体之间的消息转发流程时，首先要确定智能体的功能边界，这跟设计一个函数的套路一样：
+
+1. 智能体输入什么。智能体的输入决定了智能体对象的`rc.watch`的值。
+2. 智能体输出什么。智能体的输出决定了智能体输出`Message`的参数。
+3. 智能体要完成什么工作。智能体要完成什么工作决定了智能体有多少action，action之间按什么状态流转。
+
+假设我们要实现如下的流程：
+
+```
+Agent A 接收需求并拆分成 10 个子任务。
+Agent B 负责执行这 10 个子任务。
+Agent C 负责汇总这 10 个子任务的结果。
+Agent D 负责审核汇总结果，并向 Agent B 提供反馈。
+
+步骤 2-4 需要重复 3-4 次。
+
+我该如何设计系统架构，确保这些步骤按照正确的方式执行？
+我可以用临时代码将它们拼凑在一起，但我想知道正确的架构方式。
+```
+
+分析这个场景，我们可以得出如下结论：
+
+1. Agent A负责将需求拆分成10个subtasks.
+2. 对于每一个subtask, Agent B,C,D按如下流程处理：
+
+```
+Message(subtask) -> AgentB.run -> AgentC.run -> AgentD.run -> AgentB.run -> AgentC.run -> AgentD.run -> ...
+```
+
+也就是：
+
+1. Agent B的输入是Agent A的一个subtask，或者是Agent D的执行结果；
+2. Agent C的输入是Agent B的输出；
+3. Agent D的输入是Agent C的输出；
+
+
+
+在所有智能体都定义完毕后，需要将它们放到同一个Environment对象中，然后向第一个Agent发送消息，让它们联动起来：
+
+```python
+    context = Context() # Load config2.yaml
+    env = Environment(context=context)
+    env.add_roles([AgentA(), AgentB(), AgentC(), AgentD()])
+    env.publish_message(Message(content='New user requirements', send_to=AgentA)) # 将用户的消息发送个Agent A，让Agent A开始工作。
+    while not env.is_idle: # env.is_idle要等到所有Agent都没有任何新消息要处理后才会为True
+        await env.run()
+```
+
+
+
+Environment对象起到了一个Agent间活动的空间。类似我们的Task Group，但最终我们实现MAS在Task Group外面还需要更高一层的活动空间，因为存在部分活跃的Agent却不参与任何Task。
+
+
+
+
+
+## 6. 序列化与断点恢复
+
+**定义**
+
+断点恢复指在程序运行过程中，记录程序不同模块的产出并落盘。当程序碰到外部如`Ctrl-C`或内部执行异常如LLM Api网络异常导致退出等情况时。
+
+再次执行程序，能够从中断前的结果中恢复继续执行，而无需从0到1开始执行，降低开发者的时间和费用成本
+
+------
+
+**序列化与反序列化**
+
+为了能支持断点恢复操作，需要对程序中的不同模块产出进行结构化存储即序列化的过程，保存后续用于恢复操作的现场。
+
+序列化的操作根据不同模块的功能有所区分，比如角色基本信息，初始化后即可以进行序列化，过程中不会发生改变。
+
+记忆信息，需要执行过程中，实时进行序列化保证完整性（序列化耗时在整个程序执行中的占比很低）。这里，我们统一在发生异常或正常结束运行时进行序列化。
+
+
+
+### 6.1 实现逻辑
+
+可能产生中断的情况：
+
+- 网络等问题，LLM-Api调用重试多次后仍失败
+- Action执行过程中，输出内容解析失败导致退出
+- 人为的`Ctrl-C`对程序进行中断
+
+
+
+为了减少后续新增功能对存储结构的影响，使用“一体化“的单json文件进行存储。
+
+当程序发生中断或结束后，在存储目录下的文件结构如下：
+
+```
+./workspace
+  storage
+    team
+      team.json          # 包含团队、环境、角色、动作等信息
+```
+
+
+
+由于MetaGPT是异步执行框架，对于下述几种典型的中断截点和恢复顺序。
+
+1. 角色A（1个action）-> 角色B（2个action），角色A进行action选择时出现异常退出。
+2. 角色A（1个action）-> 角色B（2个action），角色B第1个action执行正常，第2个action执行时出现异常退出
+
+
+
+情况1
+
+执行入口重新执行后，各模块进行反序列化。角色A未观察到属于自己处理的Message，重新执行对应的action。角色B恢复后，观察到一条之前未处理完毕的Message，则在`_observe`后重新执行对应的`react`操作，按react策略执行对应2个动作。
+
+情况2
+
+执行入口重新执行后，各模块进行反序列化。角色A未观察到属于自己处理的Message，不处理。角色B恢复后，`_observe`到一条之前未完整处理完毕的Message，在`react`中，知道自己在第2个action执行失败，则直接从第2个action开始执行。
+
+
+
+**从中断前的Message开始重新执行**
+
+一般来说，Message是不同角色间沟通协作的桥梁，当在Message的执行过程中发生中断后，由于该Message已经被该角色存入环境（Environment）记忆（Memory）中。在进行恢复中，如果直接加载角色全部Memory，该角色的`_observe`将不会观察到中断时引发当时执行`Message`，从而不能恢复该Message的继续执行。
+因此，为了保证该Message在恢复时能够继续执行，需要在发生中断后，根据`_observe`到的最新信息，从角色记忆中删除对应的该条Message。
+
+**从中断前的Action开始重新执行**
+
+一般来说，Action是一个相对较小的执行模块粒度，当在Action的执行过程中发生中断后，需要知道多个Actions的执行顺序以及当前执行到哪个Action（`_rc.state`）。当进行恢复时，定位到中断时的Action位置并重新执行该Action。
+
+
+
+### 6.2 讨论
+
+MetaGPT的序列化主要用于断点恢复，因为MetaGPT中Agent的角色是通过不同代码组装而来的，所以需要完整记录角色的属性信息，因此保存的需要是每个活跃角色类的序列化信息。
+
+因此在MetaGPT中所有实例对象都继承 `pydantic` 的 `BaseModel` 专门用于方便以序列化的形式保存，同时因为 `BaseModel` 会在反序列化的时候无法恢复子类属性（无法实现多态子类序列化），因此MetaGPT专门写了一个序列化的补充函数 `BaseSerialization` 随着 `BaseModel` 一起继承用于实现多态子类序列化与反序列化。
+
+
+
+然而，我们的不同Agent具有相同的属性，Agent与Agent的区别仅在于 `agent_state` 的不同，其实例化的类的代码完全相同。我们通过 `task_state` , `stage_state` , `step_state` , `agent_state` 的设定来完整表示一个活跃项目的全部信息。
+
+**因此我们不需要作额外序列化的操作**，我们只需要将本身字典格式的四种状态保存下来，我们就可以根据状态信息来恢复一个完整的活跃项目。
