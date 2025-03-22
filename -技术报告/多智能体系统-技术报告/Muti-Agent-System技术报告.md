@@ -1307,6 +1307,10 @@ LLM 在通过 CoT 提示等机制时，强调冗长、循序渐进的推理。 �
 - Sync State（after Excute）
 
   当所有step执行完毕并且通过Reflection反思模块的审查后，汇总每个Step的状态，生成关于任务Task的状态。Task state包括需要最终返回的任务的输出（由最后一步Reflection总结）、一定的日志信息和Task的任务状态标记。并将生成的Task state同步到日志/消息池（如有）/长期记忆缓存（如有）中。
+  
+  
+
+------
 
 
 
@@ -1355,6 +1359,10 @@ LLM 在通过 CoT 提示等机制时，强调冗长、循序渐进的推理。 �
 - Sync State（after Excute）
 
   当所有step执行完毕并且通过Reflection反思模块的审查后，汇总每个Step的状态，生成关于任务Task的状态。Task state包括需要最终返回的任务的输出（由最后一步Reflection总结）、一定的日志信息和Task的任务状态标记。并将生成的Task state同步到日志/消息池（如有）/长期记忆缓存（如有）中。
+  
+  
+
+------
 
 
 
@@ -1396,6 +1404,63 @@ LLM 在通过 CoT 提示等机制时，强调冗长、循序渐进的推理。 �
   工具的定义是LLM本身所不具备的能力，而通过访问Agent外部模块接口实现的一系列功能。相比于技能，工具更接近现实世界的交互行为，能够获取或改变Agent系统外的事物。
 
   工具库包括向量数据库检索增强生成 `RAG`、搜索引擎 `Search Engine`、光学字符识别 `OCR` 等。
+
+  
+
+------
+
+
+
+##### Z3. 工作流v4
+
+我们使用一种更好的表示方式来表示v3工作流的基本概念，并明确了些许细节。
+
+简略图：
+
+![单Agent流程v4_简略图](./asset/单Agent流程v4_简略图.jpg)
+
+详细图：
+
+![单Agent流程v4](./asset/单Agent流程v4.jpg)
+
+v4工作流具现化了两个重要的特性：
+
+1. Agent能够决定使用什么工具与技能
+2. Agent能够决定自身工作逻辑
+
+动态图：
+
+![v4工作流动图](./gif/v4工作流动图.gif)
+
+我们将 `Action` 定义为工具 `Tools` 或技能 `Skills` 的一次使用。每个 `step` 的具体执行为一个 `Action` 
+
+Agent面对一个新阶段目标时，默认生成 `step_0` ，在此之中执行 `Planning` 操作。
+
+Agent每次 `Planning` 为自己新增的 `step` 队列中的最后一步一般为 `Reflection`，`Reflection` 技能能够决定是否追加新的 `step`，也可以决定阶段目标完成无误进行总结 `Summary` 。
+
+- Action
+
+  执行过程会根据接收到当前 `step` 的要求与从 `step state` 中获取到的具体指令 ，由路由分发给具体的技能或工具。
+
+  在得到执行结果反馈后，会进行 `step state` 的更新与同步。
+
+- Skills
+
+  技能的定义是所有由LLM驱动的具体衍生能力。其主要区别在于提示词的不同，且是随提示词的改变而具备的特定衍生能力。
+
+  技能库包括包括规划 `Planning`、反思 `Reflection`、总结 `Summary` 、快速思考 `Quick Think` 、指令生成 `Instruction Generation` 等 。
+
+- Tools
+
+  工具的定义是LLM本身所不具备的能力，而通过访问Agent外部模块接口实现的一系列功能。相比于技能，工具更接近现实世界的交互行为，能够获取或改变Agent系统外的事物。
+
+  工具库包括向量数据库检索增强生成 `RAG`、搜索引擎 `Search Engine`、光学字符识别 `OCR` 等。
+
+
+
+
+
+------
 
 
 
