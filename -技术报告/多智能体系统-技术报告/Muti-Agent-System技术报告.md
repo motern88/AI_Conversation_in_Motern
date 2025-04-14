@@ -1665,7 +1665,11 @@ Agent顺序执行步骤列表中待办步骤，**同一时刻，Agent中只有�
 
 ------
 
- `Task State` 和 `Stage State` 是相互指向的，但是 `Stage State` 是不指向具体 `Step State` 的，只指向负责执行的 Agent，因为 `Step State` 是由 Agent 内部产生的，只被记录在 `Agent State` 里。同时，`Step State` 会指向 `Stage State` 用于标明自己属于哪一个任务，因为一个Agent可能被分配多个不同任务的 Stage 。
+其中`Task State` 和 `Stage State` 是相互指向的，即任务状态记录自己有哪些阶段，阶段状态记录自己所属哪个任务。
+
+但是 `Stage State` 是不指向具体 `Step State` 的，只指向负责执行的 Agent。因为 `Step State` 是由 Agent 内部产生的，只被记录在 `Agent State` 里。
+
+同时，`Step State` 会指向 `Stage State` 用于标明自己属于哪一个任务，因为一个Agent可能被分配多个不同任务的 Stage 。
 
 
 
@@ -1686,12 +1690,6 @@ Task中有多个Stage，Stage中有多个Agent相互协作，Agent内部顺序�
 此时，一个`Task`进来会依次执行多个`Stage`。在每个`Stage`中，不同`Agent`被激活协作。
 
 在一些的复杂场景下，同时存在多个任务`Task`
-
-
-
-
-
-
 
 
 
