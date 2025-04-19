@@ -1700,5 +1700,39 @@ for step in planned_step:
 
 ## 6. AgentBase 基础Agent方法
 
+基础Agent类，定义各基础模块的流转逻辑
 
 
+
+整体分为两个部分，执行线程和任务管理线程
+
+- 执行
+    
+    action方法只负责不断地执行执行每一个step，有新的step就执行新的step。
+    
+    action方法执行step时不会区分是否与当前stage相关，只要在agent_step.todo_list中就会执行。
+    执行线程保证了Agent生命的自主性与持续性。
+    
+- 任务管理
+    
+    任务管理用于管理任务进度，保证Agent的可控性。所有的任务管理都通过消息传递，Agent会使用receive_message接收。
+    
+    receive_message方法：Agent接收和处理来自其他Agent的不可预知的消息，提供了Agent之间主动相互干预的能力。该方法最终会根据是否需要回复消息走入两个不同的分支，process message分支和send message分支
+
+### 6.1 Action
+
+不断从 agent_step.todo_list 获取 step_id 并执行 step_action
+
+agent_step.todo_list 是一个queue.Queue()共享队列，用于存放待执行的 step_id对 todo_list.get() 到的每个step执行step_action()
+
+
+
+### 6.2 Receive Message
+
+
+
+process_message方法:
+
+根据解析出的指令的不同进入不同方法
+
+start_stage方法: 当一个任务阶段的所有step都执行完毕后，帮助Agent建立下一个任务阶段的第一个step: planning_step）。
