@@ -20,64 +20,68 @@ MAS 多Agent系统是MoternAI团队实现的一个多Agent工作系统，它包�
 MAS中由四种层级组成，分别是Team、Task Group、Stage、Step（Agent单独说明，不在此列出）：
 
 - Team 团队：
-包含当前团队所有实例化的Agent
+    包含当前团队所有实例化的Agent
 
 - Task Group 任务群组（一个Team可以同时存在多个Task Group）：
-团队被分配的多个任务中，每一个任务会有自己的一个任务群组。任务群组由多个Agent组成。
-对每个Agent而言，可能同时参与多个任务群组。一个任务群组至专注于一个任务（一个完整任务流程），当任务完成时，该群组解散。
+    团队被分配的多个任务中，每一个任务会有自己的一个任务群组。任务群组由多个Agent组成。
+    对每个Agent而言，可能同时参与多个任务群组。一个任务群组至专注于一个任务（一个完整任务流程），当任务完成时，该群组解散。
 
 - Stage 阶段（一个Task分为多个Stage）：
-由任务群组的管理者制定和调整当前任务流程需要经过的多个任务阶段，并为每个任务阶段分配相应的Agent去执行。
-一个任务阶段可能由多个Agent协作执行。
+    由任务群组的管理者制定和调整当前任务流程需要经过的多个任务阶段，并为每个任务阶段分配相应的Agent去执行。
+    一个任务阶段可能由多个Agent协作执行。
 
 - Step 执行步骤（一个Agent会通过执行多个Step来完成其所在阶段的目标）：
-Agent被分配执行或协作执行一个阶段时，Agent会为自己规划数个执行步骤以完成目标。一次执行步骤是整个框架中的最小单位。
+    Agent被分配执行或协作执行一个阶段时，Agent会为自己规划数个执行步骤以完成目标。一次执行步骤是整个框架中的最小单位。
 
 **状态信息**
 对于信息的记录，我们实现了对应的状态空间
 
 - task_state 任务状态（大量信息）：
-任务状态由Agent/人类初始化，由Agent/人类进行更新。
-包含任务名称、任务目标、具体步骤、完成情况等，同时也记录了任务群组中参与Agent的情况，以及任务群组中共享消息池的信息。
+    任务状态由Agent/人类初始化，由Agent/人类进行更新。
+    包含任务名称、任务目标、具体步骤、完成情况等，同时也记录了任务群组中参与Agent的情况，以及任务群组中共享消息池的信息。
 
 - stage_state 任务阶段状态（简单少量信息）：
-任务阶段状态有任务群组中首个Agent负责规划，并初始化需要完成这个任务的多个阶段的任务阶段状态。
-**同一时刻，Task Group中仅有一个Stage活跃**，因此不需要在阶段状态中维护任何共享消息池，阶段状态只记录阶段目标，完成情况和Agent信息
+    任务阶段状态有任务群组中首个Agent负责规划，并初始化需要完成这个任务的多个阶段的任务阶段状态。
+    **同一时刻，Task Group中仅有一个Stage活跃**，因此不需要在阶段状态中维护任何共享消息池，阶段状态只记录阶段目标，完成情况和Agent信息
 
 - agent_state 智能体状态（大量信息）：
-Agent状态随着Agent的实例化而初始化（由其他Agent/人类初始化），由Agent自己/其他Agent/人类进行更新。
-包含Agent的个人信息，使用工具与技能的权限，以及LLM上下文的缓存。
+    Agent状态随着Agent的实例化而初始化（由其他Agent/人类初始化），由Agent自己/其他Agent/人类进行更新。
+    包含Agent的个人信息，使用工具与技能的权限，以及LLM上下文的缓存。
 
 - step_state 任务步骤状态（简单少量信息）：
-记录Agent中每一个最小动作的执行情况。仅记录当前步骤进行的具体操作，所属的任务阶段与所属的Agent。
-Agent顺序执行步骤列表中待办步骤，**同一时刻，Agent中只有一个Step被执行**。
+    记录Agent中每一个最小动作的执行情况。仅记录当前步骤进行的具体操作，所属的任务阶段与所属的Agent。
+    Agent顺序执行步骤列表中待办步骤，**同一时刻，Agent中只有一个Step被执行**。
 
 **任务执行流程**
 
 - 1.Task
-一个任务进来后，会被分配到一个Task Group中，Task Group中的首个Agent会规划任务的阶段流程。
-Task Group中首个Agent会作为任务管理者将任务规划出多个阶段stage，并为每个stage都分配一个或多个Agent去执行。
+    一个任务进来后，会被分配到一个Task Group中，Task Group中的首个Agent会规划任务的阶段流程。
+    Task Group中首个Agent会作为任务管理者将任务规划出多个阶段stage，并为每个stage都分配一个或多个Agent去执行。
 
 - 2.Stage
-Task中的多个Stage是串行执行的，一个Stage完成后，Task Group中的首个Agent会根据当前Stage的完成情况，决定下一个Stage的执行情况。
-Stage在依次被执行的过程中，会维护一个Stage状态，记录当前Stage的目标，完成情况和参与Stage的每个Agent状态。
-在当前Stage中的Agent会各自完成自己被分配到具体职责，协助完成Stage阶段目标。
+    Task中的多个Stage是串行执行的，一个Stage完成后，Task Group中的首个Agent会根据当前Stage的完成情况，决定下一个Stage的执行情况。
+    Stage在依次被执行的过程中，会维护一个Stage状态，记录当前Stage的目标，完成情况和参与Stage的每个Agent状态。
+    在当前Stage中的Agent会各自完成自己被分配到具体职责，协助完成Stage阶段目标。
 
 - 3.Step
-Agent完成或协助完成当前Stage目标的方式，是规划并执行一个个Step。
-Step是Agent的最小操作单元，一个Step中包含一个技能或工具的调用，以及调用的具体目标。
-Agent会根据当前Stage目标，通过planning规划模块生成多个Step以完成该目标，通过reflection反思模块来追加新的Step来修正Agent的执行结果。
-Agent会顺序执行自己规划的Step，同时为每个Step维护一个Step状态，记录当前Step的目标，完成情况和所属Agent等。
+    Agent完成或协助完成当前Stage目标的方式，是规划并执行一个个Step。
+    Step是Agent的最小操作单元，一个Step中包含一个技能或工具的调用，以及调用的具体目标。
+    Agent会根据当前Stage目标，通过planning规划模块生成多个Step以完成该目标，通过reflection反思模块来追加新的Step来修正Agent的执行结果。
+    Agent会顺序执行自己规划的Step，同时为每个Step维护一个Step状态，记录当前Step的目标，完成情况和所属Agent等。
 
 **协作通信**
 
 - Task Group共享消息池：
-task_state中会维护一份共享消息池，用于记录任务的全局信息，包括任务管理Agent对任务流程的更新与追加操作，任务群组成员对任务不同阶段Stage的完成情况更新等。
-共享消息池中的信息所有Agent都可以访问，然而共享消息池中的信息并不会主动发送给每个Agent，Agent并不被动接收共享消息池，Agent只会在需要的时候主动查看。
-（同一时刻，Task Group中仅有一个Stage活跃，因此不需要在 `stage state` 中维护任务阶段的共享消息池，`stage state` 只记录阶段目标和完成情况）
+    task_state中会维护一份共享消息池，用于记录任务的全局信息，包括任务管理Agent对任务流程的更新与追加操作，任务群组成员对任务不同阶段Stage的完成情况更新等。
+    共享消息池中的信息所有Agent都可以访问，然而共享消息池中的信息并不会主动发送给每个Agent，Agent并不被动接收共享消息池，Agent只会在需要的时候主动查看。
+    （同一时刻，Task Group中仅有一个Stage活跃，因此不需要在 `stage state` 中维护任务阶段的共享消息池，`stage state` 只记录阶段目标和完成情况）
 
 - Agent间通信：
-Agent间通信需要由一方主动发起（在发起方的某一个step中执行的是 `send message` 工具，接收方Agent的`step`列表中会被追加一个回应step，用于在回应step中回复这条message）
+    Agent间通信需要由一方主动发起。发起方会通过执行 `send message` 技能，向接收方发送一条message。
+    	- 如果这条message是需要回复的，则接收方Agent的`step`列表中会被追加一个 `send message` step，用于向发起方发送回复消息。
+    	- 如果这条消息是不需要回复的，则接收方Agent的`step`列表中会被追加一个 `process message` step，用于确保处理该消息内容。
+    因此，如果是一个单向消息，则通过Send Message和Process Message可以完成；
+    如果是长期多轮对话，则通过一系列的Send Message和最后一个Process Message实现。
 
 ## 单Agent内部工作流
 单Agent内部工作流程是Agent在执行一个阶段的目标时，如何规划并执行多个Step以完成该目标。
@@ -154,6 +158,25 @@ skills (List[str], 可选): Agent 可用的技能列表，例如 `['文本摘要
 消息分发类，一般实例化在MAS类中，与SyncState和Agent同级，用于消息分发。
 
 它会遍历所有 TaskState 的消息队列 `task_state.communication_queue`，捕获到消息后会调用agent.receive_message方法来处理消息。
+
+
+
+### 1.3 MultiAgentSystem
+
+多Agent系统的核心类，负责管理所有Agent的生命周期和状态同步。该类实例化三个组件：
+
+- 状态同步器
+    首先在MultiAgentSystem类中创建一个与Agent实例平级的sync_state，
+    以确保sync_state是全局唯一一个状态同步器，同时保证sync_state中的task_state是所有Agent共享的。
+
+- Agent智能体
+    MAS类是唯一的 agent 生命周期管理者，所有agent映射由它统一提供。
+
+- 消息分发器
+    同时实现一个MAS中的消息转发组件，该组件不断地从sync_state.all_tasks中的每个task_state
+    task_state.communication_queue中获取消息，并向指定的Agent发送消息。
+
+
 
 
 
@@ -1707,14 +1730,14 @@ for step in planned_step:
 整体分为两个部分，执行线程和任务管理线程
 
 - 执行
-    
+  
     action方法只负责不断地执行执行每一个step，有新的step就执行新的step。
     
     action方法执行step时不会区分是否与当前stage相关，只要在agent_step.todo_list中就会执行。
     执行线程保证了Agent生命的自主性与持续性。
     
 - 任务管理
-    
+  
     任务管理用于管理任务进度，保证Agent的可控性。所有的任务管理都通过消息传递，Agent会使用receive_message接收。
     
     receive_message方法：Agent接收和处理来自其他Agent的不可预知的消息，提供了Agent之间主动相互干预的能力。该方法最终会根据是否需要回复消息走入两个不同的分支，process message分支和send message分支
