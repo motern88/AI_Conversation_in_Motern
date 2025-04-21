@@ -1725,14 +1725,51 @@ for step in planned_step:
 
 agent_step.todo_list 是一个queue.Queue()共享队列，用于存放待执行的 step_id对 todo_list.get() 到的每个step执行step_action()
 
+**step_action()：**
+
+> 执行单个step_state的具体Action
+> 1. 根据Step的executor执行具体的Action，由路由器分发执行器
+>
+>    使用router.get_executor方法
+>
+> 2. 执行器执行当前step
+>
+>    使用executor.execute方法
+>
+> 3. 向stage_state与task_state同步执行状态
+>
+>    使用sync_state.sync_state方法
+
 
 
 ### 6.2 Receive Message
 
+接收来自其他Agent的消息（该消息由MAS中的message_dispatcher转发），
+根据消息内容添加不同的step：
+
+- 如果需要回复则添加send_message step
+- 如果不需要回复则进入process_message分支，
+  考虑执行消息中的指令或添加process_message step
 
 
-process_message方法:
 
-根据解析出的指令的不同进入不同方法
+**process_message方法:**
 
-start_stage方法: 当一个任务阶段的所有step都执行完毕后，帮助Agent建立下一个任务阶段的第一个step: planning_step）。
+处理不需要回复的消息，会进入该消息处理分支
+
+> message格式：
+> {
+>     "task_id": task_id,
+>     "sender_id": "<sender_agent_id>",
+>     "receiver": ["<agent_id>", "<agent_id>", ...],
+>     "message": "<message_content>",  # 消息文本
+>     "stage_relative": "<stage_id或no_relative>",  # 表示是否与任务阶段相关，是则填对应阶段Stage ID，否则为no_relative的字符串
+>     "need_reply": <bool>,  # 需要回复则为True，否则为False
+> }
+
+解析`message["message"]`中的内容
+
+1. 对于需要LLM理解并消化的消息，添加process_message step
+2. 如果instruction字典包含start_stage的key,则执行start_stage：
+   当一个任务阶段的所有step都执行完毕后，帮助Agent建立下一个任务阶段的第一个step: planning_step）。
+
