@@ -469,7 +469,7 @@ sync_state（executor_output: Dict[str, any]）接收executor的输出字典，�
 | send_shared_message           | 添加共享消息到任务共享消息池                                 |
 | update_stage_agent_completion | 更新阶段中Agent完成情况                                      |
 | send_message                  | 将Agent.executor传出的消息添加到task_state.communication_queue通讯队列中 |
-|                               |                                                              |
+| task_instruction              | 解析并执行具体任务管理操作：<br />1. 创建任务 add_task<br />2. 为任务创建阶段 add_stage<br />3. 结束任务 finish_task<br />4. 结束阶段 finish_stage<br /> |
 |                               |                                                              |
 |                               |                                                              |
 
@@ -2027,7 +2027,10 @@ agent_step.todo_list 是一个queue.Queue()共享队列，用于存放待执行�
 
 1. 对于需要LLM理解并消化的消息，添加process_message step
 2. 如果instruction字典包含start_stage的key,则执行start_stage：
-   当一个任务阶段的所有step都执行完毕后，帮助Agent建立下一个任务阶段的第一个step: planning_step）。
+   当一个任务阶段的所有step都执行完毕后，帮助Agent建立下一个任务阶段的第一个step: planning_step）
+3. 如果instruction字典包含finish_stage的key,则执行清除该stage的所有step并且清除相应working_memory
+4. 如果instruction字典包含finish_task的key,则执行清除该task的所有step并且清除相应working_memory
+5. 如果instruction字典包含update_working_memory的key,则更新Agent的工作记忆
 
 
 
