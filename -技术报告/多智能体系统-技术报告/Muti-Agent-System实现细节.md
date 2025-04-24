@@ -2043,7 +2043,9 @@ agent_step.todo_list 是一个queue.Queue()共享队列，用于存放待执行�
 
 ### 7.2 Router
 
+Router类根据step_state.type和step_state.executor两个字符串。
 
+访问Executor的注册表_registry，获取对应执行器类，并返回实例化后的执行器类。
 
 
 
