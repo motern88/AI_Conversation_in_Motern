@@ -337,7 +337,7 @@ agent_state 是 Agent的重要承载体，它包含了一个Agent的所有状态
 | name              | str            | Agent的名称                                                  |
 | role              | str            | Agent的角色                                                  |
 | profile           | str            | Agent的角色简介                                              |
-| working_state     | str            | Agent的当前工作状态；<br />Unassigned 未分配任务, idle 空闲, working 工作中, awaiting 等待执行反馈中 |
+| working_state     | str            | Agent的当前工作状态；<br /> idle 空闲, working 工作中, waiting 等待执行反馈中 |
 | llm_config        | Dict[str, Any] | 从配置文件中获取 LLM 配置                                    |
 | working_memory    | Dict[str, Any] | Agent工作记忆 {<task_id>: {<stage_id>: [<step_id>,...],...},...} 记录Agent还未完成的属于自己的任务 |
 | persistent_memory | str            | 由Agent自主追加的永久记忆，不会因为任务、阶段、步骤的结束而被清空；<br />（md格式纯文本，里面只能用三级标题 ### 及以下！不允许出现一二级标题！） |
@@ -524,11 +524,11 @@ Planning需要有操作Agent中AgentStep的能力，AgentStep是Agent的执行�
 >
 > 3 planning step:（# 一级标题）
 >
-> ​	3.1 step.step_intention 当前步骤的简要意图（## 二级标题）
+> ​	3.1 step.step_intention 当前步骤的简要意图
 >
-> ​	3.2 step.text_content 具体目标（## 二级标题）
+> ​	3.2 step.text_content 具体目标
 >
-> ​	3.3 技能规则提示(planning_config["use_prompt"])（## 二级标题）
+> ​	3.3 技能规则提示(planning_config["use_prompt"])
 >
 > 4 持续性记忆:（# 一级标题）
 >
@@ -644,11 +644,11 @@ Reflection需要获取到过去执行步骤的信息，并且具备操作AgentSt
 >
 > 3 reflection step:（# 一级标题）
 >
-> ​	3.1 step.step_intention 当前步骤的简要意图（## 二级标题）
+> ​	3.1 step.step_intention 当前步骤的简要意图
 >
-> ​	3.2 step.text_content 具体目标（## 二级标题）
+> ​	3.2 step.text_content 具体目标
 >
-> ​	3.3 技能规则提示(reflection_config["use_prompt"])（## 二级标题）
+> ​	3.3 技能规则提示(reflection_config["use_prompt"])
 >
 > 4 历史步骤执行结果（# 一级标题）
 >
@@ -708,7 +708,7 @@ Reflection需要获取到过去执行步骤的信息，并且具备操作AgentSt
 >
 >    通过`send_shared_message`字段指导sync_state更新，
 >
->    Planning顺利完成时`shared_step_situation`更新为 ”finished“，失败时更新为 “failed”
+>    Reflection顺利完成时`shared_step_situation`更新为 ”finished“，失败时更新为 “failed”
 >
 >    ```python
 >    execute_output["send_shared_message"] = {
@@ -777,11 +777,11 @@ Summary技能对stage信息的获取来源于第一个步骤Planning_step：
 >
 > 3 summary step:（# 一级标题）
 >
-> ​	3.1 step.step_intention 当前步骤的简要意图（## 二级标题）
+> ​	3.1 step.step_intention 当前步骤的简要意图
 >
-> ​	3.2 step.text_content 具体目标（## 二级标题）
+> ​	3.2 step.text_content 具体目标
 >
-> ​	3.3 技能规则提示(summary_config["use_prompt"])（## 二级标题）
+> ​	3.3 技能规则提示(summary_config["use_prompt"])
 >
 > 4 历史步骤执行结果（# 一级标题）
 >
@@ -833,7 +833,9 @@ Summary技能对stage信息的获取来源于第一个步骤Planning_step：
 >
 >    通过`update_stage_agent_state`字段指导sync_state更新，
 >
->    summary顺利完成时`update_agent_situation`更新为 ”working“，失败时更新为 “failed”
+>    summary顺利完成时`update_agent_situation`更新为 ”finished“，失败时更新为 “failed”
+>
+>    **一般情况下，summary标志的Agent完成当前阶段，只有summary可以为every_agent_state更新”finished“，其它步骤完成时都只能更新”working“**
 >
 >    ```python
 >    execute_output["update_stage_agent_state"] = {
@@ -916,11 +918,11 @@ Instruction Generation会获取下一个工具step的信息，并具备更新下
 >
 > 3 instruction_generation step:（# 一级标题）
 >
-> ​	3.1 step.step_intention 当前步骤的简要意图（## 二级标题）
+> ​	3.1 step.step_intention 当前步骤的简要意图
 >
-> ​	3.2 step.text_content 具体目标（## 二级标题）
+> ​	3.2 step.text_content 具体目标
 >
-> ​	3.3 技能规则提示(instruction_generation_config["use_prompt"])（## 二级标题）
+> ​	3.3 技能规则提示(instruction_generation_config["use_prompt"])
 >
 > 4 tool step:（# 一级标题）
 >
@@ -1035,11 +1037,11 @@ Instruction Generation会获取下一个工具step的信息，并具备更新下
 >
 > 3 think step:（# 一级标题）
 >
-> ​	3.1 step.step_intention 当前步骤的简要意图（## 二级标题）
+> ​	3.1 step.step_intention 当前步骤的简要意图
 >
-> ​	3.2 step.text_content 具体目标（## 二级标题）
+> ​	3.2 step.text_content 具体目标
 >
-> ​	3.3 技能规则提示(think_config["use_prompt"])（## 二级标题）
+> ​	3.3 技能规则提示(think_config["use_prompt"])
 >
 > 4 历史步骤执行结果（# 一级标题）
 >
@@ -1078,7 +1080,7 @@ Instruction Generation会获取下一个工具step的信息，并具备更新下
 >
 >    通过`update_stage_agent_state`字段指导sync_state更新，
 >
->    instruction_generation顺利完成时`update_agent_situation`更新为 ”working“，失败时更新为 “failed”
+>    think顺利完成时`update_agent_situation`更新为 ”working“，失败时更新为 “failed”
 >
 >    ```python
 >    execute_output["update_stage_agent_state"] = {
@@ -1088,6 +1090,23 @@ Instruction Generation会获取下一个工具step的信息，并具备更新下
 >        "state": update_agent_situation,
 >    }
 >    ```
+>
+> 4. 添加步骤完成情况到task_state的共享消息池：
+>
+>    通过`send_shared_message`字段指导sync_state更新，
+>
+>    think顺利完成时`shared_step_situation`更新为 ”finished“，失败时更新为 “failed”
+>
+>    ```python
+>    execute_output["send_shared_message"] = {
+>        "agent_id": agent_state["agent_id"],
+>        "role": agent_state["role"],
+>        "stage_id": stage_id,
+>        "content": f"执行think步骤:{shared_step_situation}，"
+>    }
+>    ```
+
+
 
 
 
@@ -1125,11 +1144,11 @@ Instruction Generation会获取下一个工具step的信息，并具备更新下
 >
 > 3 quick_think step:（# 一级标题）
 >
-> ​	3.1 step.step_intention 当前步骤的简要意图（## 二级标题）
+> ​	3.1 step.step_intention 当前步骤的简要意图
 >
-> ​	3.2 step.text_content 具体目标（## 二级标题）
+> ​	3.2 step.text_content 具体目标
 >
-> ​	3.3 技能规则提示(quick_think_config["use_prompt"])（## 二级标题）
+> ​	3.3 技能规则提示(quick_think_config["use_prompt"])
 >
 > 4 持续性记忆:（# 一级标题）
 >
@@ -1176,6 +1195,23 @@ Instruction Generation会获取下一个工具step的信息，并具备更新下
 >        "state": update_agent_situation,
 >    }
 >    ```
+>
+> 4. 添加步骤完成情况到task_state的共享消息池：
+>
+>    通过`send_shared_message`字段指导sync_state更新，
+>
+>    quick_think顺利完成时`shared_step_situation`更新为 ”finished“，失败时更新为 “failed”
+>
+>    ```python
+>    execute_output["send_shared_message"] = {
+>        "agent_id": agent_state["agent_id"],
+>        "role": agent_state["role"],
+>        "stage_id": stage_id,
+>        "content": f"执行quick_think步骤:{shared_step_situation}，"
+>    }
+>    ```
+
+
 
 
 
@@ -1191,7 +1227,7 @@ Send Message 首先需要构建发送对象列表。[<agent_id>, <agent_id>, ...
 其次需要确定发送的内容，通过 Send Message 技能的提示+LLM调用返回结果的解析可以得到。
 需要根据发送的实际内容，LLM需要返回的信息:
 
-```
+```json
 <send_message>
 {
     "sender_id": "<sender_agent_id>",
@@ -1266,11 +1302,11 @@ Send Message 首先需要构建发送对象列表。[<agent_id>, <agent_id>, ...
 >
 > 3 send_message step:（# 一级标题）
 >
-> ​	3.1 step.step_intention 当前步骤的简要意图（## 二级标题）
+> ​	3.1 step.step_intention 当前步骤的简要意图
 >
-> ​	3.2 step.text_content 具体目标（## 二级标题）
+> ​	3.2 step.text_content 具体目标
 >
-> ​	3.3 技能规则提示(send_message_config["use_prompt"])（## 二级标题）
+> ​	3.3 技能规则提示(send_message_config["use_prompt"])
 >
 > 4 历史步骤执行结果（# 一级标题）
 >
@@ -1284,7 +1320,20 @@ Send Message 首先需要构建发送对象列表。[<agent_id>, <agent_id>, ...
 
 **交互行为：**
 
-> 1. 解析persistent_memory并追加到Agent持续性记忆中
+> 1. 添加待处理消息到task_state.communication_queue：
+>
+>    通过`send_message`字段指导sync_state更新，
+>
+>    ```python
+>    # 为消息体添加task_id
+>    send_message["task_id"] = task_id
+>    # 构造execute_output
+>    execute_output["send_message"] = send_message
+>    ```
+>
+>    最终execute_output["send_message"]符合Message格式。
+>
+> 2. 解析persistent_memory并追加到Agent持续性记忆中
 >
 >    ```python
 >    new_persistent_memory = self.extract_persistent_memory(response)
@@ -1309,7 +1358,7 @@ Send Message 首先需要构建发送对象列表。[<agent_id>, <agent_id>, ...
 >
 >    通过`update_stage_agent_state`字段指导sync_state更新，
 >
->    instruction_generation顺利完成时`update_agent_situation`更新为 ”working“，失败时更新为 “failed”
+>    send_message顺利完成时`update_agent_situation`更新为 ”working“，失败时更新为 “failed”
 >
 >    ```python
 >    execute_output["update_stage_agent_state"] = {
@@ -1324,16 +1373,14 @@ Send Message 首先需要构建发送对象列表。[<agent_id>, <agent_id>, ...
 >
 >    通过`send_shared_message`字段指导sync_state更新，
 >
->    instruction_generation顺利完成时`shared_step_situation`更新为 ”finished“，失败时更新为 “failed”
+>    send_message顺利完成时`shared_step_situation`更新为 ”finished“，失败时更新为 “failed”
 >
 >    ```python
->    execute_output["send_message"] = {
->        "task_id": step_state.task_id,
->        "sender_id": send_message["sender_id"],
->        "receiver": send_message["receiver"],
->        "message": send_message["message"],
->        "stage_relative": send_message["stage_relative"],
->        "need_reply": send_message["need_reply"],
+>    execute_output["send_shared_message"] = {
+>        "agent_id": agent_state["agent_id"],
+>        "role": agent_state["role"],
+>        "stage_id": stage_id,
+>        "content": f"执行Send Message步骤:{shared_step_situation}，"
 >    }
 >    ```
 
@@ -1361,6 +1408,10 @@ Send Message 首先需要构建发送对象列表。[<agent_id>, <agent_id>, ...
 
 
 
+Message内容可能包含md标题，为了防止与其他提示的md标题形成标题冲突，因此得调整提示词顺序。
+
+
+
 **提示词顺序：**
 
 系统 → 角色 → (目标 → 规则) → 记忆
@@ -1369,15 +1420,16 @@ Send Message 首先需要构建发送对象列表。[<agent_id>, <agent_id>, ...
 
 **具体实现：**
 
-> 1. 组装提示词
-> 2. llm调用
-> 3. 解析llm返回的理解内容
-> 4. 解析llm返回的持续性记忆信息，追加到Agent的持续性记忆中
-> 5. 返回用于指导状态同步的execute_output
+> 1. 组装预提示词
+> 2. 组装消息处理步骤提示词
+> 3. llm调用
+> 4. 解析llm返回的理解内容
+> 5. 解析llm返回的持续性记忆信息，追加到Agent的持续性记忆中
+> 6. 返回用于指导状态同步的execute_output
 
 
 
-**提示词：**
+**预提示词：**
 
 > 1 MAS系统提示词（# 一级标题）
 >
@@ -1387,21 +1439,25 @@ Send Message 首先需要构建发送对象列表。[<agent_id>, <agent_id>, ...
 >
 > ​	2.2 Agent可使用的工具与技能权限提示词（## 二级标题）
 >
-> 3 process_message step:（# 一级标题）
+> 3 历史步骤执行结果（# 一级标题）
 >
-> ​	3.1 step.step_intention 当前步骤的简要意图（## 二级标题）
+> 4 持续性记忆:（# 一级标题）
 >
-> ​	3.2 step.text_content 具体目标（## 二级标题）
+> ​	4.1 Agent持续性记忆说明提示词（## 二级标题）
 >
-> ​	3.3 技能规则提示(process_message_config["use_prompt"])（## 二级标题）
+> ​	4.2 Agent持续性记忆内容提示词（## 二级标题）
+
+
+
+**消息处理步骤提示词：**
+
+> 1 process_message step:
 >
-> 4 历史步骤执行结果（# 一级标题）
+> ​	1.1 step.step_intention 当前步骤的简要意图
 >
-> 5 持续性记忆:（# 一级标题）
+> ​	1.2 step.text_content 接收到的消息内容
 >
-> ​	5.1 Agent持续性记忆说明提示词（## 二级标题）
->
-> ​	5.2 Agent持续性记忆内容提示词（## 二级标题）
+> ​	1.3 技能规则提示(process_message_config["use_prompt"])
 
 
 
@@ -1432,7 +1488,7 @@ Send Message 首先需要构建发送对象列表。[<agent_id>, <agent_id>, ...
 >
 >    通过`update_stage_agent_state`字段指导sync_state更新，
 >
->    instruction_generation顺利完成时`update_agent_situation`更新为 ”working“，失败时更新为 “failed”
+>    process_message顺利完成时`update_agent_situation`更新为 ”working“，失败时更新为 “failed”
 >
 >    ```python
 >    execute_output["update_stage_agent_state"] = {
@@ -1442,10 +1498,191 @@ Send Message 首先需要构建发送对象列表。[<agent_id>, <agent_id>, ...
 >        "state": update_agent_situation,
 >    }
 >    ```
+>
+> 4. 添加步骤完成情况到task_state的共享消息池：
+>
+>    通过`send_shared_message`字段指导sync_state更新，
+>
+>    process_message顺利完成时`shared_step_situation`更新为 ”finished“，失败时更新为 “failed”
+>
+>    ```python
+>    execute_output["send_shared_message"] = {
+>        "agent_id": agent_state["agent_id"],
+>        "role": agent_state["role"],
+>        "stage_id": stage_id,
+>        "content": f"执行process_message步骤:{shared_step_situation}，"
+>    }
+>    ```
 
 
 
-### 3.9 （TODO）
+
+
+### 3.9 Task Manager
+
+**期望作用：**Agent对任务的管理与调度。（一种特殊权限的技能，一般只有管理者Agent拥有）
+
+**说明：**
+
+Task Manager会参考自身历史步骤信息（前面步骤获取任务信息与阶段信息），生成用于管理任务进程的指令。
+
+任务管理者Agent会通过该技能生成相应操作的指令，指令会再MAS系统中操作对应组件完成实际行动，
+例如通过SyncState操作task_state与stage_state,通过send_message形式通知相应Agent。
+
+
+
+1. 发起一个Task:
+
+    创建任务 add_task。
+
+    该操作会创建一个 task_state,包含 task_intention 任务意图
+
+    
+
+2. 为任务分配Agent与阶段目标:
+
+    为任务创建阶段 add_stage。
+
+    该操作会为 task_state 创建一个或多个 stage_state,
+
+    包含 stage_intention 阶段意图与 agent_allocation 阶段中Agent的分配情况。
+
+    
+
+3. 任务判定已完成，交付任务:
+
+    结束任务 finish_task。
+
+    该操作会将 task_state 的状态更新为 finished 或 failed
+
+    并通知task_group中所有Agent。
+
+    
+
+4. 任务阶段判定已结束，进入下一个任务阶段:
+
+    结束阶段 finish_stage。
+
+    该操作会将 stage_state 的状态更新为 finished 或 failed
+
+    阶段完成则进入下一个阶段，如果失败则反馈给任务管理者。
+
+
+
+**提示词顺序：**
+
+系统 → 角色 → (目标 → 规则) → 记忆
+
+
+
+**具体实现：**
+
+> 1. 组装提示词
+> 2. llm调用
+> 3. 解析llm返回的指令构造
+> 4. 解析llm返回的持续性记忆信息，追加到Agent的持续性记忆中
+> 5. 返回用于指导状态同步的execute_output
+
+
+
+**提示词：**
+
+> 1 MAS系统提示词（# 一级标题）
+>
+> 2 Agent角色:（# 一级标题）
+>
+> ​	2.1 Agent角色背景提示词（## 二级标题）
+>
+> ​	2.2 Agent可使用的工具与技能权限提示词（## 二级标题）
+>
+> 3 task_managerstep:（# 一级标题）
+>
+> ​	3.1 step.step_intention 当前步骤的简要意图
+>
+> ​	3.2 step.text_content 具体目标
+>
+> ​	3.3 技能规则提示(task_manager_config["use_prompt"])
+>
+> 4 历史步骤执行结果（# 一级标题）
+>
+> 5 持续性记忆:（# 一级标题）
+>
+> ​	5.1 Agent持续性记忆说明提示词（## 二级标题）
+>
+> ​	5.2 Agent持续性记忆内容提示词（## 二级标题）
+
+
+
+**交互行为：**
+
+> 1. 包含多种不同任务操作行为，由sync_state完成任务指令的解析与具体执行：
+>
+>    通过`task_instruction`字段指导sync_state更新，
+>
+>    ```python
+>    # 在指令中添加自身agent_id
+>    task_instruction["agent_id"] = agent_state["agent_id"]
+>    execute_output["task_instruction"] = task_instruction
+>    ```
+>
+>    此时task_instruction中包含"agent_id","action"和其他具体操作指令涉及的字段。
+>
+> 2. 解析persistent_memory并追加到Agent持续性记忆中
+>
+>    ```python
+>    new_persistent_memory = self.extract_persistent_memory(response)
+>    agent_state["persistent_memory"] += "\n" + new_persistent_memory
+>    ```
+
+
+
+**其他状态同步：**
+
+> 1. 更新agent_step中当前step状态：
+>    execute开始执行时更新状态为 “running”，完成时更新为 “finished”，失败时更新为 “failed”
+>
+> 2. 在当前step.execute_result中记录技能解析结果：
+>
+>    ```python
+>    execute_result = {"task_instruction": task_instruction}
+>    step.update_execute_result(execute_result)
+>    ```
+>
+> 3. 更新stage_state.every_agent_state中自己的状态：
+>
+>    通过`update_stage_agent_state`字段指导sync_state更新，
+>
+>    task_manager顺利完成时`update_agent_situation`更新为 ”working“，失败时更新为 “failed”
+>
+>    ```python
+>    execute_output["update_stage_agent_state"] = {
+>        "task_id": task_id,
+>        "stage_id": stage_id,
+>        "agent_id": agent_state["agent_id"],
+>        "state": update_agent_situation,
+>    }
+>    ```
+>
+> 4. 添加步骤完成情况到task_state的共享消息池：
+>
+>    通过`send_shared_message`字段指导sync_state更新，
+>
+>    task_manager顺利完成时`shared_step_situation`更新为 ”finished“，失败时更新为 “failed”
+>
+>    ```python
+>    execute_output["send_shared_message"] = {
+>        "agent_id": agent_state["agent_id"],
+>        "role": agent_state["role"],
+>        "stage_id": stage_id,
+>        "content": f"执行task_manager步骤:{shared_step_situation}，"
+>    }
+>    ```
+
+
+
+
+
+### 3.10 （TODO）
 
 **期望作用：**
 
@@ -1474,10 +1711,6 @@ Send Message 首先需要构建发送对象列表。[<agent_id>, <agent_id>, ...
 
 
 **其他状态同步：**
-
-
-
-
 
 
 
@@ -1796,3 +2029,59 @@ agent_step.todo_list 是一个queue.Queue()共享队列，用于存放待执行�
 2. 如果instruction字典包含start_stage的key,则执行start_stage：
    当一个任务阶段的所有step都执行完毕后，帮助Agent建立下一个任务阶段的第一个step: planning_step）。
 
+
+
+## 7 其他基本组件
+
+
+
+### 7.1 LLM Client
+
+
+
+
+
+### 7.2 Router
+
+
+
+
+
+### 7.3 Message
+
+定义了MAS内部消息传递的基本格式
+
+> Message字典包含Key及含义:
+>
+> ​	task_id (str): 任务ID
+>
+> ​	sender_id (str): 发送者ID
+>
+> ​	receiver (List[str]): 接收者ID列表
+>
+> ​	message (str): 消息内容
+> ​		如果其中包含指令，则用<instruction>和</instruction>包裹指令字典
+>
+> ​	
+>
+> ​	stage_relative (str): 是否与任务阶段相关
+> ​		用于方便清除机制判断是否要随任务阶段
+>
+> ​	need_reply (bool): 是否需要回复
+> ​		如果需要回复，则接收者被追加一个指向发送者的Send Message step，
+>
+> ​		如果不需要回复，则接收者被追加一个Process Message step，
+> ​		Process Message 不需要向其他实体传递消息或回复
+>
+> ​	
+>
+> ​	waiting (Optional[List[str]]): 等待回复的唯一ID列表
+> ​		如果发送者需要等待回复，则为所有发送对象填写唯一等待标识ID。不等待则为 None
+>
+> ​		如果等待，则发起者将在回收全部等待标识前不会进行任何步骤执行
+>
+> ​	return_waiting_id (Optional[str]): 返回的唯一等待标识ID
+> ​		如果这个消息是用于回复消息发起者的，且消息发起时带有唯一等待标识ID，
+> ​		则回复时也需要返回这个唯一等待标识ID
+>
+> ​		如果不返回，则会导致消息发起者无法回收这个唯一等待标识ID，发起者将陷入无尽等待中。
