@@ -6,7 +6,7 @@
 
 ## 1. MAS 系统
 
-### 1.1 基础设定
+### 1.1 基础设定（TODO）
 
 MAS系统调用LLM的系统提示词（位于`mas/agent/base/base_prompt.yaml`）
 
@@ -1215,7 +1215,7 @@ Instruction Generation会获取下一个工具step的信息，并具备更新下
 
 
 
-### 3.7 Send Message (TODO)
+### 3.7 Send Message 
 
 **期望作用：**Agent在MAS系统内部的对另一个Agent实例的单向消息发送。
 
