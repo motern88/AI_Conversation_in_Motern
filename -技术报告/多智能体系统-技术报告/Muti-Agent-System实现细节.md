@@ -2133,7 +2133,7 @@ Router类根据step_state.type和step_state.executor两个字符串。
 
 
 
-### 8.1 步骤锁（通信）
+### 8.1 步骤锁（通信等待回复时）
 
 由于我们MAS中Agent与其他组件或其他Agent的通信是通过 Send Message 和 Process Message 技能，以步骤 Step 的方式执行。
 
