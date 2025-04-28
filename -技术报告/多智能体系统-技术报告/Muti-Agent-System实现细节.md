@@ -470,7 +470,7 @@ sync_state（executor_output: Dict[str, any]）接收executor的输出字典，�
 | update_stage_agent_completion | 更新阶段中Agent完成情况                                      |
 | send_message                  | 将Agent.executor传出的消息添加到task_state.communication_queue通讯队列中 |
 | task_instruction              | 解析并执行具体任务管理操作：<br />1. 创建任务 add_task<br />2. 为任务创建阶段 add_stage<br />3. 结束任务 finish_task<br />4. 结束阶段 finish_stage<br /> |
-|                               |                                                              |
+| ask_info                      | 解析并执行具体信息查询操作<br />1. 查看自身所管理的task_state及其附属stage_state的信息<br />2. 查看自身所参与的task_state及参与的stage_state的信息<br />3. 查看指定task_state的信息<br />4. 查看指定stage_stage的信息<br />5. 查看MAS中所有Agent的profile<br />6. 查看Team中所有Agent的profile<br />7. 查看指定task_id的task_group中所有Agent的profile<br />8. 查看指定stage下协作的所有Agent的profile<br />9. 查看指定agent_id或多个agent_id的详细agent_state信息<br /> |
 |                               |                                                              |
 
 
@@ -1716,9 +1716,183 @@ Task Manager会参考自身历史步骤信息（前面步骤获取任务信息�
 
 
 
+### 3.10 Ask Info
+
+**期望作用：**Agent通过Ask Info获取自身以外的系统/任务信息或其他Agent信息
+
+**说明：**
+
+Ask Info向Agent提供了查看自身以外的信息的能力包括其他Agent的profile及状态，
+由SyncState帮助收集上级stage_state，task_state等信息，使用Message传递回Agent。
+
+我们通过提示词约束LLM以特定格式返回获取相应信息的特定指令，通过这些特定指令指导SyncState进行特定查询操作，查询结果通过Message消息传递回Agent。
 
 
-### 3.10 （TODO）
+
+> 技能支持的查询选项有：
+>        1. 查看自身所管理的task_state及其附属stage_state的信息
+>        2. 查看自身所参与的task_state及参与的stage_state的信息
+>        3. 查看指定task_state的信息
+>        4. 查看指定stage_stage的信息
+>        5. 查看MAS中所有Agent的profile
+>        6. 查看Team中所有Agent的profile  TODO：Team未实现
+>        7. 查看指定task_id的task_group中所有Agent的profile
+>        8. 查看指定stage下协作的所有Agent的profile
+>        9. 查看指定agent_id或多个agent_id的详细agent_state信息
+
+
+
+Ask Info本质上是一种的特殊消息发送技能，它起两个作用
+
+- 向Agent提供信息查询选项
+
+- 向SyncState传递信息查询指令
+
+SyncState接收到消息查询指令后立刻回复消息给Agent，Agent立即使用process_message step来接收。因此，Ask Info技能需要实时性，Ask Info会触发等待通信的步骤锁，直到收到返回消息（执行process_message step）
+
+
+
+**提示词顺序：**
+
+系统 → 角色 → (目标 → 规则) → 记忆
+
+
+
+**具体实现：**
+
+> 1. 组装提示词:
+> 2. llm调用
+> 3. 解析llm返回的查询信息
+> 4. 解析llm返回的持续性记忆信息，追加到Agent的持续性记忆中
+> 5. 必定触发通信等待的步骤锁
+> 6. 返回用于指导状态同步的execute_output
+
+
+
+**提示词：**
+
+> 1 MAS系统提示词（# 一级标题）
+> 2 Agent角色:（# 一级标题）
+> 	2.1 Agent角色背景提示词（## 二级标题）
+> 	2.2 Agent可使用的工具与技能权限提示词（## 二级标题）
+> 3 ask_info step:（# 一级标题）
+> 	3.1 step.step_intention 当前步骤的简要意图
+> 	3.2 step.text_content 具体目标
+> 	3.3 技能规则提示(ask_info_config["use_prompt"])
+> 4 持续性记忆:（# 一级标题）
+> 	4.1 Agent持续性记忆说明提示词（## 二级标题）
+> 	4.2 Agent持续性记忆内容提示词（## 二级标题）
+
+
+
+**交互行为：**
+
+> 1. 丰富LLM生成的初步指令调用信息：
+>
+>    通过`ask_info`字段指导sync_state更新，
+>
+>    ```python
+>    ask_instruction["sender_id"] = sender_id
+>    ask_instruction["sender_task_id"] = sender_task_id
+>    # 将添加了发送者ID和发送者任务ID的查询指令放入输出的ask_info字段中
+>    execute_output["ask_info"] = ask_instruction
+>    ```
+>
+>    此时查询指令结构：
+>
+>    ```python
+>    execute_output["ask_instruction"] = {
+>      "type":"<不同查询选项>",
+>      "waiting_id":"<唯一等待标识ID>",
+>      "sender_id":"<查询者的agent_id>"
+>      "sender_task_id":"<查询者的task_id>"
+>      ...
+>    }
+>    ```
+>
+>    该指令结构会在SyncState组件中触发具体查询行为：
+>
+>    > 在SyncState中根据不同的查询指令的"type"值查询不同结果，并构造包含等待标识ID的消息体：
+>    >
+>    > ```python
+>    > message: Message = {
+>    >     "task_id": ask_info["sender_task_id"],  # 发送者所处的任务
+>    >     "sender_id": ask_info["sender_id"],  # 发送者
+>    >     "receiver": [ask_info["sender_id"]],  # 接收者
+>    >     "message": "\n".join(return_ask_info_md),  # 返回md格式的查询结果
+>    >     "stage_relative": "no_relative",
+>    >     "need_reply": False,
+>    >     "waiting": None,
+>    >     "return_waiting_id": ask_info["waiting_id"]  # 返回唯一等待标识ID
+>    > }
+>    > ```
+>    >
+>    > 以向Agent追加process_message step的形式，返回查询结果。
+>
+> 2. 解析persistent_memory并追加到Agent持续性记忆中
+>
+>    ```python
+>    new_persistent_memory = self.extract_persistent_memory(response)
+>    agent_state["persistent_memory"] += "\n" + new_persistent_memory
+>    ```
+>
+> 3. 必定触发Agent步骤锁：
+>
+>    生成唯一等待标识ID，直到SyncState回复消息中包含该ID（Agent回收步骤锁后），Agent才可进行后续step执行。
+>
+>    ```python
+>    waiting_id = str(uuid.uuid4())
+>    agent_state["step_lock"].append(waiting_id)  
+>    ask_instruction["waiting_id"] = waiting_id
+>    ```
+
+
+
+**其他状态同步：**
+
+> 1. 更新agent_step中当前step状态：
+>    execute开始执行时更新状态为 “running”，完成时更新为 “finished”，失败时更新为 “failed”
+>
+> 2. 在当前step.execute_result中记录技能解析结果：
+>
+>    ```python
+>    execute_result = {"ask_instruction": ask_instruction}
+>    step.update_execute_result(execute_result)
+>    ```
+>
+> 3. 更新stage_state.every_agent_state中自己的状态：
+>
+>    通过`update_stage_agent_state`字段指导sync_state更新，
+>
+>    ask_info顺利完成时`update_agent_situation`更新为 ”working“，失败时更新为 “failed”
+>
+>    ```python
+>    execute_output["update_stage_agent_state"] = {
+>        "task_id": task_id,
+>        "stage_id": stage_id,
+>        "agent_id": agent_state["agent_id"],
+>        "state": update_agent_situation,
+>    }
+>    ```
+>
+> 4. 添加步骤完成情况到task_state的共享消息池：
+>
+>    通过`send_shared_message`字段指导sync_state更新，
+>
+>    ask_info顺利完成时`shared_step_situation`更新为 ”finished“，失败时更新为 “failed”
+>
+>    ```python
+>    execute_output["send_shared_message"] = {
+>        "agent_id": agent_state["agent_id"],
+>        "role": agent_state["role"],
+>        "stage_id": stage_id,
+>        "content": f"执行Ask Info步骤:{shared_step_situation}，"
+>    }
+>    ```
+
+
+
+### 3.11 （TODO）
 
 **期望作用：**
 
