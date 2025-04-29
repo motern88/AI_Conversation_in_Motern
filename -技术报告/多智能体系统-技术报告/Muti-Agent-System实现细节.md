@@ -6,7 +6,7 @@
 
 ## 1. MAS 系统
 
-### 1.1 基础设定（TODO）
+### 1.1 基础设定
 
 MAS系统调用LLM的系统提示词（位于`mas/agent/base/base_prompt.yaml`）
 
@@ -20,11 +20,16 @@ MAS 多Agent系统是MoternAI团队实现的一个多Agent工作系统，它包�
 MAS中由四种层级组成，分别是Team、Task Group、Stage、Step（Agent单独说明，不在此列出）：
 
 - Team 团队：
-    包含当前团队所有实例化的Agent
+	包含当前团队所有实例化的Agent
 
 - Task Group 任务群组（一个Team可以同时存在多个Task Group）：
-    团队被分配的多个任务中，每一个任务会有自己的一个任务群组。任务群组由多个Agent组成。
-    对每个Agent而言，可能同时参与多个任务群组。一个任务群组至专注于一个任务（一个完整任务流程），当任务完成时，该群组解散。
+	团队被分配的多个任务中，每一个任务会有自己的一个任务群组。任务群组由多个Agent组成。
+	对每个Agent而言，可能同时参与多个任务群组。一个任务群组只专注于一个任务（一个完整任务流程），当任务完成时，该群组解散。
+
+	特殊情况（MAS中的第一个Task）：
+	MAS初始化时必须创建一个任务，以此为Agent提供初始活动空间，该任务名为"MAS基础任务进程"。
+	该任务群组会包含管理Agent，这些Agent专门负责帮助人类创建和管理新的任务。
+	该任务保证了管理Agent能够持续获取来自人类操作员的指令，一般该"MAS基础任务进程"永不结束。
 
 - Stage 阶段（一个Task分为多个Stage）：
     由任务群组的管理者制定和调整当前任务流程需要经过的多个任务阶段，并为每个任务阶段分配相应的Agent去执行。
@@ -55,11 +60,12 @@ MAS中由四种层级组成，分别是Team、Task Group、Stage、Step（Agent�
 **任务执行流程**
 
 - 1.Task
-    一个任务进来后，会被分配到一个Task Group中，Task Group中的首个Agent会规划任务的阶段流程。
-    Task Group中首个Agent会作为任务管理者将任务规划出多个阶段stage，并为每个stage都分配一个或多个Agent去执行。
+    MAS中的某个拥有任务管理权限的Agent接到需求后，会将需求转化为明确的任务目标，在SyncState中创建一个相应的TaskState。
+    该任务所绑定的管理Agent需要首先为任务添加相关的Agent，这些Agent在一个任务中组成了一个Task Group任务群组。
+    其次管理Agent会将总任务目标合理地拆分成阶段目标，并为每个阶段目标分配相应的Agent去执行。
 
 - 2.Stage
-    Task中的多个Stage是串行执行的，一个Stage完成后，Task Group中的首个Agent会根据当前Stage的完成情况，决定下一个Stage的执行情况。
+    Task中的多个Stage是串行执行的，一个Stage完成后，Task Group中的管理Agent会根据当前Stage的完成情况，决定下一个Stage的执行情况。
     Stage在依次被执行的过程中，会维护一个Stage状态，记录当前Stage的目标，完成情况和参与Stage的每个Agent状态。
     在当前Stage中的Agent会各自完成自己被分配到具体职责，协助完成Stage阶段目标。
 
@@ -78,17 +84,67 @@ MAS中由四种层级组成，分别是Team、Task Group、Stage、Step（Agent�
 
 - Agent间通信：
     Agent间通信需要由一方主动发起。发起方会通过执行 `send message` 技能，向接收方发送一条message。
-    	- 如果这条message是需要回复的，则接收方Agent的`step`列表中会被追加一个 `send message` step，用于向发起方发送回复消息。
-    	- 如果这条消息是不需要回复的，则接收方Agent的`step`列表中会被追加一个 `process message` step，用于确保处理该消息内容。
+    - 如果这条message是需要回复的，则接收方Agent的`step`列表中会被追加一个 `send message` step，用于向发起方发送回复消息。
+    - 如果这条消息是不需要回复的，则接收方Agent的`step`列表中会被追加一个 `process message` step，用于确保处理该消息内容。
     因此，如果是一个单向消息，则通过Send Message和Process Message可以完成；
     如果是长期多轮对话，则通过一系列的Send Message和最后一个Process Message实现。
 
-## 单Agent内部工作流
-单Agent内部工作流程是Agent在执行一个阶段的目标时，如何规划并执行多个Step以完成该目标。
-单Agent内部工作流是多Agent系统(MAS)的重要组成部分, 它是Agent**自主决定自身工作逻辑与自主决定使用什么工具与技能**的重要实现方式之一。
+    特殊机制-步骤锁：
+    在Agent通信中，如果发起方认为需要等待该消息的回复，则会为自身添加步骤锁。直到接受到该次消息的回复，自身都不再进行任何步骤的执行。
 
-单个Agent内部通过不断顺序执行一个个step从而完成一次次操作与action。
-Agent通过planning模块与reflection模块来为自己增加新的step与调整已有的step。
+### Task State
+本小节将简要介绍 task_state 涉及的字段
+
+属性:
+task_id (str): 任务ID，用于标识一个任务的唯一ID
+task_name (str): 一个任务简介的名称，向人类使用者提供基本的信息区分
+task_intention (str): 任务意图, 较为详细的任务目标说明
+task_manager (str): 任务管理者Agent ID，负责管理这个任务的Agent ID
+
+task_group (list[str]): 任务群组，包含所有参与这个任务的Agent ID
+shared_message_pool (List[Dict]): 任务群组共享消息池（可选结构：包含agent_id, role, content等）
+communication_queue (queue.Queue): 用于存放任务群组的通讯消息队列，Agent之间相互发送的待转发的消息会被存放于此
+
+stage_list (List[StageState]): 当前任务下所有阶段的列表（顺序执行不同阶段）
+execution_state (str): 当前任务的执行状态，"init"、"running"、"finished"、"failed"
+task_summary (str): 任务完成后的总结，由SyncState或调度器最终生成
+
+说明:
+共享消息池是各个Agent完成自己step后同步的简略信息，且共享消息池的信息所有Agent可主动访问，但是不会一有新消息就增量通知Agent。Agent可以不感知共享消息池的变化。
+通讯消息队列是Agent之间相互发送的待转发的消息，里面存放的是Agent主动发起的通讯请求，里面必然包含需要其他Agent及时回复/处理的消息。
+
+### Stage State
+本小节将简要介绍 stage_state 涉及的字段
+
+属性:
+task_id (str): 任务ID，用于标识一个任务的唯一ID
+stage_id (str): 阶段ID，用于标识一个阶段的唯一ID
+
+stage_intention (str): 阶段的意图, 由创建Agent填写(仅作参考并不需要匹配特定格式)。例如：'Extract contract information and archive it...'
+agent_allocation (Dict[<agent_id>, <agent_stage_goal>]):
+    阶段中Agent的分配情况，key为Agent ID，value为Agent在这个阶段职责的详细说明
+
+execution_state (str): 阶段的执行状态
+    "init" 初始化（阶段状态已创建）
+    "running" 执行中
+    "finished" 已完成
+    "failed" 失败（阶段执行异常终止）
+
+every_agent_state (Dict[<agent_id>, <agent_state>]): 涉及到的每个Agent在这个阶段的状态
+    "idle" 空闲
+    "working" 工作中
+    "finished" 已完成
+    "failed" 失败（agent没能完成阶段目标）
+    这里的状态是指Agent在这个阶段的状态，不是全局状态
+
+completion_summary (Dict[<agent_id>, <completion_summary>]): 阶段中每个Agent的完成情况
+
+## Agent内部工作流
+Agent内部工作流程是Agent在执行一个阶段的目标时，如何规划并执行多个Step以完成该目标。
+Agent内部工作流是多Agent系统(MAS)的重要组成部分, 它是Agent**自主决定自身工作逻辑与自主决定使用什么工具与技能**的重要实现方式之一。
+
+单个Agent内部通过不断顺序执行一个个step从而完成一次次操作action。
+Agent通过planning步骤与reflection步骤来为自己增加新的step与调整已有的step。
 每一个step执行一个具体的操作，包括调用一个技能或工具，或者发送消息给其他Agent。
 
 **skill**
@@ -97,9 +153,10 @@ Agent通过planning模块与reflection模块来为自己增加新的step与调�
 
 **tool**
 工具的定义是LLM本身所不具备的能力，而通过访问Agent外部模块接口实现的一系列功能。相比于技能，工具更接近现实世界的交互行为，能够获取或改变Agent系统外的事物。
-工具库包括向量数据库检索增强生成 `rag`、搜索引擎 `search_engine`、光学字符识别 `ocr` 等。
+工具库包括搜索引擎 `search_engine` 等。
 
 ### Step State
+step_state是由Agent生成的最小执行单位。包含LLM的文本回复（思考/反思/规划/决策）或一次工具调用。
 本小节将简要介绍 step_state 涉及的字段
 
 属性:
@@ -109,21 +166,23 @@ agent_id (str): Agent ID，用于标识一个Agent的唯一ID
 step_id (str): 步骤ID，用于标识一个步骤的唯一ID，自动生成
 step_intention (str): 步骤的意图, 由创建Agent填写(仅作参考并不需要匹配特定格式)。例如：\"ask a question\", \'provide an answer\', \'use tool to check...\'
 
-type (str): 步骤的类型,例如：\'skill\', \'tool\'
-executor (str): 执行该步骤的对象，如果是 type 是 \'tool\' 则填工具名称，如果是 \'skill\' 则填技能名称
+type (str): 步骤的类型,例如：'skill', 'tool'
+executor (str): 执行该步骤的对象，如果是 type 是 'tool' 则填工具名称，如果是 'skill' 则填技能名称
 execution_state (str): 步骤的执行状态：
-    \'init\' 初始化（步骤已创建）
-    \'pending\' 等待内容填充中（依赖数据未就绪），一般情况下只出现在工具指令填充，技能使用不需要等待前一步step去填充
-    \'running\' 执行中
-    \'finished\' 已完成
-    \'failed\' 失败（步骤执行异常终止）
+  'init' 初始化（步骤已创建）
+  'pending' 等待内容填充中（依赖数据未就绪），一般情况下只出现在工具指令填充，技能使用不需要等待前一步step去填充 TODO:工具step是否需要这个状态
+  'running' 执行中
+  'finished' 已完成
+  'failed' 失败（步骤执行异常终止）
 
-text_content (str): 文本内容，
+text_content (str): 文本内容，对step_intention详细而具体的描述，一般由前面步骤的LLM生成
     - 如果是技能调用则是填入技能调用的提示文本（不是Skill规则的系统提示，而是需要这个skill做什么具体任务的目标提示文本）
       step中的这个属性是只包含当前步骤目标的提示词，不包含Agent自身属性（如技能与工具权限）的提示词
     - 如果是工具调用则应当填写该次工具调用的具体详细的目标。
-instruction_content (Dict[str, Any]): 指令内容，如果是工具调用则是具体工具命令  TODO：Dict[str, Any]具体格式
-execute_result (Dict[str, Any]): 执行结果，如果是文本回复则是文本内容，如果是工具调用则是工具返回结果  TODO：Dict[str, Any]具体格式
+instruction_content (Dict[str, Any]): 指令内容，如果是工具调用则是具体工具命令
+    - instruction_content一般只在工具调用时使用，在绝大部分step初始化中都不需要填入
+      在工具调用前一步的instruction_generation会负责生成具体的工具调用命令。
+execute_result (Dict[str, Any]): 执行结果，如果是文本回复则是文本内容，如果是工具调用则是工具返回结果
 
 ### Agent State
 agent_state 是 Agent的重要承载体，它是一个字典包含了一个Agent的所有状态信息。
@@ -136,19 +195,18 @@ Agent被实例化时需要初始化自己的 agent_state, agent_state 会被持�
 agent_id (str): Agent 的唯一标识符，由更高层级的 Agent 管理器生成。
 name (str): Agent 的名称。
 role (str): Agent 的角色，例如 数据分析师、客服助手 等。
-profile (str): Agent 的角色简介，描述该 Agent 的核心能力和任务。
-working_state (str): Agent 的工作状态，例如 Unassigned 未分配任务, idle 空闲, working 工作中, awaiting 等待执行反馈中。
+profile (str): Agent 的角色简介，描述该 Agent 的核心能力。
+working_state (str): Agent 的工作状态，例如 idle 空闲, working 工作中, awaiting 等待执行反馈中。
 llm_config (Dict[str, Any]): LLM（大语言模型）的配置信息
 working_memory (Dict[str, Any]: 
-    - 以任务视角存储 Agent 的工作记忆。  
-    - 结构为 `{<task_id>: {<stage_id>: [<step_id>, ...], ...}, ...}`  
-    - 记录未完成的任务、阶段和步骤，不用于长期记忆。  
-persistent_memory (str): 永久追加精简记忆，用于记录Agent的持久性记忆，不会因为任务,阶段,步骤的结束而被清空
-    - md格式纯文本，里面只能用三级标题 ### 及以下！不允许出现一二级标题！
+    以任务视角存储 Agent 的工作记忆。  
+    结构为 `{<task_id>: {<stage_id>: [<step_id>, ...], ...}, ...}`  
+    记录未完成的任务、阶段和步骤，不用于长期记忆。  
+persistent_memory (str): 永久追加的精简记忆，用于记录Agent的持久性记忆，不会因为任务,阶段,步骤的结束而被清空
+	md格式纯文本，**里面只能用三级标题及以下！不允许出现一二级标题！**
 agent_step (AgentStep): AgentStep是一个对step_state的管理类，维护一个包含step_state的列表
 tools (List[str], 可选): Agent 可用的工具列表，例如 `['搜索引擎', '计算器']`，默认为空列表。
 skills (List[str], 可选): Agent 可用的技能列表，例如 `['文本摘要', '图像识别']`，默认为空列表。
-
 ```
 
 
@@ -1754,15 +1812,16 @@ Ask Info向Agent提供了查看自身以外的信息的能力包括其他Agent�
 
 
 > 技能支持的查询选项有：
->        1. 查看自身所管理的task_state及其附属stage_state的信息
->        2. 查看自身所参与的task_state及参与的stage_state的信息
->        3. 查看指定task_state的信息
->        4. 查看指定stage_stage的信息
->        5. 查看MAS中所有Agent的profile
->        6. 查看Team中所有Agent的profile  TODO：Team未实现
->        7. 查看指定task_id的task_group中所有Agent的profile
->        8. 查看指定stage下协作的所有Agent的profile
->        9. 查看指定agent_id或多个agent_id的详细agent_state信息
+>           1. 查看自身所管理的task_state及其附属stage_state的信息
+>           2. 查看自身所参与的task_state及参与的stage_state的信息
+>           3. 查看指定task_state的信息
+>           4. 查看指定stage_stage的信息
+>           5. 查看可直接新实例化的Agent配置文件
+>           6. 查看MAS中所有Agent的profile
+>           7. 查看Team中所有Agent的profile  TODO：Team未实现
+>           8. 查看指定task_id的task_group中所有Agent的profile
+>           9. 查看指定stage下协作的所有Agent的profile
+>           10. 查看指定agent_id或多个agent_id的详细agent_state信息
 
 
 
