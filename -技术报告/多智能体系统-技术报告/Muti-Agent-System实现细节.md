@@ -552,7 +552,9 @@ sync_state（executor_output: Dict[str, any]）接收executor的输出字典，�
 | update_stage_agent_completion | 更新阶段中Agent完成情况                                      |
 | send_message                  | 将Agent.executor传出的消息添加到task_state.communication_queue通讯队列中 |
 | task_instruction              | 解析并执行具体任务管理操作：<br />1. 创建任务 add_task<br />2. 为任务创建阶段 add_stage<br />3. 结束任务 finish_task<br />4. 结束阶段 finish_stage<br /> |
-| ask_info                      | 解析并执行具体信息查询操作<br />1. 查看自身所管理的task_state及其附属stage_state的信息<br />2. 查看自身所参与的task_state及参与的stage_state的信息<br />3. 查看指定task_state的信息<br />4. 查看指定stage_stage的信息<br />5. 查看MAS中所有Agent的profile<br />6. 查看Team中所有Agent的profile<br />7. 查看指定task_id的task_group中所有Agent的profile<br />8. 查看指定stage下协作的所有Agent的profile<br />9. 查看指定agent_id或多个agent_id的详细agent_state信息<br /> |
+| agent_instruction             | 解析并执行具体Agent管理操作<br />1. 实例化新的Agent<br />2. 将Agent添加到任务群组中<br /> |
+| ask_info                      | 解析并执行具体信息查询操作<br />1. 查看自身所管理的task_state及其附属stage_state的信息<br />2. 查看自身所参与的task_state及参与的stage_state的信息<br />3. 查看指定task_state的信息<br />4. 查看指定stage_stage的信息<br /><br />5. 查看所有可直接实例化的Agent配置信息<br />6. 查看MAS中所有Agent的profile<br />7. 查看Team中所有Agent的profile<br />8. 查看指定task_id的task_group中所有Agent的profile<br />9. 查看指定stage下协作的所有Agent的profile<br />10. 查看指定agent_id或多个agent_id的详细agent_state信息<br /><br />11. 查看MAS中所有技能与工具的详细说明<br /> |
+|                               |                                                              |
 |                               |                                                              |
 
 
@@ -1659,31 +1661,31 @@ Task Manager会参考自身历史步骤信息（前面步骤获取任务信息�
 
 2. 为任务分配Agent与阶段目标:
 
-    为任务创建阶段 add_stage。
+   为任务创建阶段 add_stage。
 
-    该操作会为 task_state 创建一个或多个 stage_state,
+   该操作会为 task_state 创建一个或多个 stage_state,
 
-    包含 stage_intention 阶段意图与 agent_allocation 阶段中Agent的分配情况。
+   包含 stage_intention 阶段意图与 agent_allocation 阶段中Agent的分配情况。
 
-    
+
 
 3. 任务判定已完成，交付任务:
 
-    结束任务 finish_task。
+   结束任务 finish_task。
 
-    该操作会将 task_state 的状态更新为 finished 或 failed
+   该操作会将 task_state 的状态更新为 finished 或 failed
 
-    并通知task_group中所有Agent。
+   并通知task_group中所有Agent。
 
-    
+
 
 4. 任务阶段判定已结束，进入下一个任务阶段:
 
-    结束阶段 finish_stage。
+   结束阶段 finish_stage。
 
-    该操作会将 stage_state 的状态更新为 finished 或 failed
+   该操作会将 stage_state 的状态更新为 finished 或 failed
 
-    阶段完成则进入下一个阶段，如果失败则反馈给任务管理者。
+   阶段完成则进入下一个阶段，如果失败则反馈给任务管理者。
 
 
 
@@ -1798,7 +1800,147 @@ Task Manager会参考自身历史步骤信息（前面步骤获取任务信息�
 
 
 
-### 3.10 Ask Info
+### 3.10 Agent Manager
+
+**期望作用：** Agent对其他Agent的操控与调度。（一种特殊权限的技能，一般只有管理者Agent拥有）
+
+**说明：**
+
+Agent Manager会参考自身历史步骤信息（前面步骤获取相关Agent信息），生成用于操控其他Agent的指令。任务管理者Agent会通过该技能生成相应操作的指令，指令会在MAS系统中操作对应组件完成实际行动。
+
+
+
+1. 创建一个新Agent:
+
+   实例化一个新的Agent init_new_agent
+
+   该操作会有管理Agent自主创建一个新Agent实例
+
+   通过在SyncState中调用MultiAgentSystem的add_agent方法实现
+
+2. 将Agent添加到任务中:
+
+   添加agent到任务群组中 add_task_participant
+
+   该操作会为指定任务添加Agent，Agent会被添加到该任务的任务群组task_group中
+
+   所有参与该任务的Agent都应当存在于该任务的任务群组中
+
+
+
+**提示词顺序：**
+
+系统 → 角色 → (目标 → 规则) → 记忆
+
+
+
+**具体实现：**
+
+> 1. 组装提示词
+>     
+> 2. llm调用
+> 3. 解析llm返回的指令构造
+> 4. 解析llm返回的持续性记忆信息，追加到Agent的持续性记忆中
+> 5. 返回用于指导状态同步的execute_output
+
+
+
+**提示词：**
+
+> 1 MAS系统提示词（# 一级标题）
+>
+> 2 Agent角色:（# 一级标题）
+>
+> ​	2.1 Agent角色背景提示词（## 二级标题）
+>
+> ​	2.2 Agent可使用的工具与技能权限提示词（## 二级标题）
+>
+> 3 agent_manager step:（# 一级标题）
+>
+> ​	3.1 step.step_intention 当前步骤的简要意图
+>
+> ​	3.2 step.text_content 具体目标
+>
+> ​	3.3 技能规则提示(agent_manager_config["use_prompt"])
+>
+> 4 历史步骤执行结果（# 一级标题）
+>
+> 5 持续性记忆:（# 一级标题）
+>
+> ​	5.1 Agent持续性记忆说明提示词（## 二级标题）
+>
+> ​	5.2 Agent持续性记忆内容提示词（## 二级标题）
+
+
+
+**交互行为：**
+
+> 1. 包含多种不同任务操作行为，由sync_state完成任务指令的解析与具体执行：
+>
+>    通过`agent_instruction`字段指导sync_state更新，
+>
+>    ```python
+>    # 在指令中添加自身agent_id
+>    agent_instruction["agent_id"] = agent_state["agent_id"]
+>    execute_output["agent_instruction"] = agent_instruction
+>    ```
+>
+>    此时agent_instruction中包含"agent_id","action"和其他具体操作指令涉及的字段。
+>
+> 2. 解析persistent_memory并追加到Agent持续性记忆中
+>
+>    ```python
+>    new_persistent_memory = self.extract_persistent_memory(response)
+>    agent_state["persistent_memory"] += "\n" + new_persistent_memory
+>    ```
+
+
+
+**其他状态同步：**
+
+> 1. 更新agent_step中当前step状态：
+>    execute开始执行时更新状态为 “running”，完成时更新为 “finished”，失败时更新为 “failed”
+>
+> 2. 在当前step.execute_result中记录技能解析结果：
+>
+>    ```python
+>    execute_result = {"agent_instruction": agent_instruction}
+>    step.update_execute_result(execute_result)
+>    ```
+>
+> 3. 更新stage_state.every_agent_state中自己的状态：
+>
+>    通过`update_stage_agent_state`字段指导sync_state更新，
+>
+>    agent_manager顺利完成时`update_agent_situation`更新为 ”working“，失败时更新为 “failed”
+>
+>    ```python
+>    execute_output["update_stage_agent_state"] = {
+>        "task_id": task_id,
+>        "stage_id": stage_id,
+>        "agent_id": agent_state["agent_id"],
+>        "state": update_agent_situation,
+>    }
+>    ```
+>
+> 4. 添加步骤完成情况到task_state的共享消息池：
+>
+>    通过`send_shared_message`字段指导sync_state更新，
+>
+>    task_manager顺利完成时`shared_step_situation`更新为 ”finished“，失败时更新为 “failed”
+>
+>    ```python
+>    execute_output["send_shared_message"] = {
+>        "agent_id": agent_state["agent_id"],
+>        "role": agent_state["role"],
+>        "stage_id": stage_id,
+>        "content": f"执行agent_manager步骤:{shared_step_situation}，"
+>    }
+>    ```
+
+
+
+### 3.11 Ask Info
 
 **期望作用：**Agent通过Ask Info获取自身以外的系统/任务信息或其他Agent信息
 
@@ -1812,16 +1954,30 @@ Ask Info向Agent提供了查看自身以外的信息的能力包括其他Agent�
 
 
 > 技能支持的查询选项有：
->           1. 查看自身所管理的task_state及其附属stage_state的信息
->           2. 查看自身所参与的task_state及参与的stage_state的信息
->           3. 查看指定task_state的信息
->           4. 查看指定stage_stage的信息
->           5. 查看可直接新实例化的Agent配置文件
->           6. 查看MAS中所有Agent的profile
->           7. 查看Team中所有Agent的profile  TODO：Team未实现
->           8. 查看指定task_id的task_group中所有Agent的profile
->           9. 查看指定stage下协作的所有Agent的profile
->           10. 查看指定agent_id或多个agent_id的详细agent_state信息
+>    1. 查看自身所管理的task_state及其附属stage_state的信息
+>
+>    2. 查看自身所参与的task_state及参与的stage_state的信息
+>
+>    3. 查看指定task_state的信息
+>
+>    4. 查看指定stage_stage的信息
+>
+>          
+>
+>    5. 查看可直接新实例化的Agent配置文件
+>
+>    6. 查看MAS中所有Agent的profile
+>
+>    7. 查看Team中所有Agent的profile  TODO：Team未实现
+>
+>    8. 查看指定task_id的task_group中所有Agent的profile
+>
+>    9. 查看指定stage下协作的所有Agent的profile
+>
+>    10. 查看指定agent_id或多个agent_id的详细agent_state信息
+>           
+>
+>        11. 查看MAS中所有技能与工具
 
 
 
@@ -1975,7 +2131,7 @@ SyncState接收到消息查询指令后立刻回复消息给Agent，Agent立即�
 
 
 
-### 3.11 （TODO）
+### 3.12 （TODO）
 
 **期望作用：**
 
@@ -2019,7 +2175,9 @@ SyncState接收到消息查询指令后立刻回复消息给Agent，Agent立即�
 
 
 
+工具步骤如果需要反复向LLM确认的，则可以通过步骤锁+添加第二个相同的工具步骤来实现
 
+在工具内部实现分支
 
 
 
