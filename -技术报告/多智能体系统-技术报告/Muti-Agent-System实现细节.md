@@ -2466,12 +2466,12 @@ agent_step.todo_list 是一个queue.Queue()共享队列，用于存放待执行�
 
 > message格式：
 > {
->     "task_id": task_id,
->     "sender_id": "<sender_agent_id>",
->     "receiver": ["<agent_id>", "<agent_id>", ...],
->     "message": "<message_content>",  # 消息文本
->     "stage_relative": "<stage_id或no_relative>",  # 表示是否与任务阶段相关，是则填对应阶段Stage ID，否则为no_relative的字符串
->     "need_reply": <bool>,  # 需要回复则为True，否则为False
+>     	"task_id": task_id,
+>    	 "sender_id": "<sender_agent_id>",
+>    	 "receiver": ["<agent_id>", "<agent_id>", ...],
+>    	 "message": "<message_content>",  # 消息文本
+>    	 "stage_relative": "<stage_id或no_relative>",  # 表示是否与任务阶段相关，是则填对应阶段Stage ID，否则为no_relative的字符串
+>    	 "need_reply": <bool>,  # 需要回复则为True，否则为False
 > }
 
 解析`message["message"]`中的内容
@@ -2489,7 +2489,7 @@ agent_step.todo_list 是一个queue.Queue()共享队列，用于存放待执行�
 
 
 
-### 7.1 LLM Client
+### 7.1 LLM Client（TODO）
 
 
 
