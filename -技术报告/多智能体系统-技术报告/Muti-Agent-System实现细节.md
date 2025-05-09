@@ -2175,15 +2175,39 @@ SyncState接收到消息查询指令后立刻回复消息给Agent，Agent立即�
 
 
 
-## 4. Tool 工具（TODO：确定工具与指令生成交互方式）
+## 4. Tool 工具
+
+所有的工具 `tool` 一般都不包含LLM调用，工具的指令生成由专门的技能 `InstructionGeneration` 技能完成。因此一个基本的工具执行包含两个Step：
+
+```python
+[InstructionGeneration]->[Tool]
+```
+
+如果需要需要反复向LLM确认的，则通过步骤锁+添加新的步骤来实现，这类需要相同工具多次调用的情况被称为工具的长尾调用。
+
+对于工具的**长尾调用**，我们使用 `ToolDecision` 技能来串联：
+
+```python
+([I.G.] -> [Tool]) -> [ToolDecision] -> ([I.G.] -> [Tool]) -> ......
+```
+
+`ToolDecision` 技能负责调用LLM接收并处理长尾工具的返回结果，并决定下一步该工具的执行（指导指令生成步骤）或是结束长尾工具调用。
+
+长尾工具会在工具步骤执行后将工具返回结果经由 `SyncState` 以消息的方式让 Agent 追加一个 `ToolDecision` 来决策工具否继续调用及如何继续调用。
 
 
 
-工具步骤如果需要反复向LLM确认的，则可以通过步骤锁+添加第二个相同的工具步骤来实现
+因此：
 
-在工具内部实现分支
+- 对于单次调用的一般工具
 
-所有的工具都会继承`mas.agent.base.executor_base.Executor`使用基础执行器类的通用方法
+  以 `InstructionGeneration` 开始，以具体工具步骤结尾。
+
+- 对于多次调用的长尾工具
+
+  以 `InstructionGeneration` 开始，以  `ToolDecision` 结尾，其中可能包含多次 “指令生成-工具执行” 的步骤。
+
+  
 
 
 
