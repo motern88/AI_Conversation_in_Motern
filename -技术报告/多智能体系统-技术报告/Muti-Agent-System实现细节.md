@@ -2179,6 +2179,118 @@ SyncState接收到消息查询指令后立刻回复消息给Agent，Agent立即�
 
 在工具内部实现分支
 
+所有的工具都会继承`mas.agent.base.executor_base.Executor`使用基础执行器类的通用方法
+
+
+
+### 4.1 Browser Use
+
+**期望作用：**
+
+Agent通过browser_use工具能够执行自动化的网络浏览任务，包括访问网站、提取网页内容、填写表单、点击按钮等复杂的网页交互操作。
+
+**说明：**
+
+Browser Use工具允许MAS系统直接与网络世界进行交互，扩展其信息获取和任务执行能力。工具使用底层的browser-use库，该库通过Playwright提供浏览器自动化能力，结合LLM的理解能力实现复杂网页任务的自动化完成。
+
+**提示词顺序：**
+
+系统 → 角色 → (目标 → 规则) → 记忆
+
+
+
+**具体实现：**
+
+> 1. 组装提示词
+> 2. LLM调用生成浏览器任务描述
+> 3. 执行浏览器操作任务（包含初始化浏览器环境、执行任务并收集结果、保证资源正确关闭）
+> 4. 解析执行结果并构建结果摘要，更新步骤状态与执行结果
+> 5. 返回用于指导状态同步的execute_output
+
+**提示词：**
+
+>   1 MAS系统提示词（# 一级标题）
+>
+>   2 Agent角色提示词:（# 一级标题）
+>
+> ​    2.1 Agent角色背景提示词（## 二级标题）
+>
+> ​    2.2 Agent可使用的工具与技能权限提示词（## 二级标题）
+>
+>   3 browser_use_task step:（# 一级标题）
+>
+> ​    3.1 step.step_intention 当前步骤的简要意图
+>
+> ​    3.2 step.text_content 具体目标
+>
+> ​    3.3 技能规则提示(browser_use_config["use_prompt"])
+>
+>   4. 持续性记忆:（# 一级标题）
+>
+> ​    4.1 Agent持续性记忆说明提示词（## 二级标题）
+>
+> ​    4.2 Agent持续性记忆内容提示词（## 二级标题）
+
+**交互行为：**
+
+> 1. 解析persistent_memory并追加到Agent持续性记忆中
+>
+>    ```python
+>    new_persistent_memory = self.extract_persistent_memory(response)
+>    if new_persistent_memory:  # 当有新的记忆内容时追加持续性记忆
+>        agent_state["persistent_memory"] += "\n" + new_persistent_memory
+>    ```
+
+**其他状态同步：**
+
+> 1. 更新agent_step中当前step状态：
+>    execute开始执行时更新状态为 “running”，完成时更新为 “finished”，失败时更新为 “failed”
+>
+> 2. 在当前step.execute_result中记录工具解析结果：
+>
+>    ```python
+>    execute_result = {  
+>        "browser_use_result": {  
+>            "final_result": result.get("final_result", ""),  
+>            "urls_visited": result.get("urls", []),  
+>            "content_count": len(result.get("extracted_content", [])),  
+>        }  
+>    }  
+>    step_state.update_execute_result(execute_result)  
+>    ```
+>
+> 3. 更新stage_state.every_agent_state中自己的状态：
+>
+>    通过`update_stage_agent_state`字段指导sync_state更新，
+>
+>    browser use顺利完成时`update_agent_situation`更新为 ”working“，失败时更新为 “failed”
+>
+>    ```python
+>    execute_output["update_stage_agent_state"] = {
+>        "task_id": task_id,
+>        "stage_id": stage_id,
+>        "agent_id": agent_state["agent_id"],
+>        "state": update_agent_situation,
+>    }
+>    ```
+>
+> 4. 添加步骤完成情况到task_state的共享消息池：
+>
+>    通过`send_shared_message`字段指导sync_state更新，
+>
+>    process_message顺利完成时`shared_step_situation`更新为 ”finished“，失败时更新为 “failed”
+>
+>    ```python
+>    execute_output["send_shared_message"] = {  
+>        "agent_id": agent_state["agent_id"],  
+>        "role": agent_state["role"],  
+>        "stage_id": stage_id,  
+>        "content": f"执行browser_use步骤: {shared_step_situation}"  
+>    }  
+>    ```
+
+
+
 
 
 ## 5. Executor 及通用提示词
