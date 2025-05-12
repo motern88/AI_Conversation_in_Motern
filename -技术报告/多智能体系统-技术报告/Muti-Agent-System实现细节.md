@@ -2221,103 +2221,212 @@ Agent通过browser_use工具能够执行自动化的网络浏览任务，包括�
 
 Browser Use工具允许MAS系统直接与网络世界进行交互，扩展其信息获取和任务执行能力。工具使用底层的browser-use库，该库通过Playwright提供浏览器自动化能力，结合LLM的理解能力实现复杂网页任务的自动化完成。
 
-**提示词顺序：**
-
-系统 → 角色 → (目标 → 规则) → 记忆
-
 
 
 **具体实现：**
 
-> 1. 组装提示词
-> 2. LLM调用生成浏览器任务描述
-> 3. 执行浏览器操作任务（包含初始化浏览器环境、执行任务并收集结果、保证资源正确关闭）
-> 4. 解析执行结果并构建结果摘要，更新步骤状态与执行结果
-> 5. 返回用于指导状态同步的execute_output
+从步骤状态获取指令:
 
-**提示词：**
+> 1.1 从step_state.instruction_content获取由instruction_generation技能生成的浏览器操作指令
+>
+> 1.2 尝试提取指令生成中提取到的任务描述
 
->   1 MAS系统提示词（# 一级标题）
+执行浏览器操作任务:
+
+> 2.1 根据LLM配置初始化兼容的LLM (OpenAI或Ollama)
 >
->   2 Agent角色提示词:（# 一级标题）
+> 2.2 设置浏览器环境配置(Browser、Controller)
 >
-> ​    2.1 Agent角色背景提示词（## 二级标题）
+> 2.3 创建并运行browser-use 第三方Agent执行任务，限制最大步骤数为100
 >
-> ​    2.2 Agent可使用的工具与技能权限提示词（## 二级标题）
+> 2.4 确保资源正确关闭(浏览器、playwright实例)
+
+处理执行结果:
+
+> 3.1 提取任务执行的最终结果(final_result)
 >
->   3 browser_use_task step:（# 一级标题）
+> 3.2 记录访问的URL列表(urls_visited)和提取的内容数量(content_count)
 >
-> ​    3.1 step.step_intention 当前步骤的简要意图
+> 3.3 构建结果摘要用于状态更新
+
+更新步骤状态:
+
+> 4.1 成功执行时将步骤状态更新为finished
 >
-> ​    3.2 step.text_content 具体目标
+> 4.2 失败时将步骤状态更新为failed并记录错误信息
+
+返回用于指导状态同步的execute_output:
+
+> 5.1 通过update_stage_agent_state指导更新agent状态为working
 >
-> ​    3.3 技能规则提示(browser_use_config["use_prompt"])
+> 5.2 通过send_shared_message添加步骤执行结果到task共享消息池
+
+
+
+错误处理:
+
+> 指令完全为空: 更新步骤状态为failed并返回错误信息
 >
->   4. 持续性记忆:（# 一级标题）
+> 浏览器操作失败：捕获并记录详细的异常信息，更新步骤状态为failed
 >
-> ​    4.1 Agent持续性记忆说明提示词（## 二级标题）
+> LLM配置缺失：检查是否有可用的LLM配置，不存在则报错并更新状态
+
+浏览器任务结果包含:
+
+> final_result: 任务执行的最终结果文本
 >
-> ​    4.2 Agent持续性记忆内容提示词（## 二级标题）
+> urls_visited: 访问过的网页URL列表
+>
+> extracted_content: 从网页中提取的内容列表
+>
+> content_count: 提取内容的数量统计
+
+适用场景:
+
+> 网络信息采集：从多个网站收集特定信息
+>
+> 自动化表单填写：完成注册、申请等需要填写表单的任务
+>
+> 市场调研：收集产品信息、价格比较等
+>
+> 自动化测试：验证网站功能和内容的有效性
+>
+> 预约和订购: 自动化完成在线预约和订购流程
+
+注意事项:
+
+- 必须由instruction_generation技能先生成明确的浏览器操作指令
+- 指令应详细描述所需的浏览任务，包括目标网站、操作步骤和期望结果
+- 默认以非无头模式运行浏览器(headless=False)，便于观察和调试
+- 操作过程中的截图会保存到screenshots目录
+
+
 
 **交互行为：**
 
-> 1. 解析persistent_memory并追加到Agent持续性记忆中
+> 1. 从指令中提取浏览器任务描述：
 >
->    ```python
->    new_persistent_memory = self.extract_persistent_memory(response)
->    if new_persistent_memory:  # 当有新的记忆内容时追加持续性记忆
->        agent_state["persistent_memory"] += "\n" + new_persistent_memory
->    ```
+> ```python
+> task_description  = step_state.instruction_content.strip()
+> ```
+>
+> 2. 执行浏览器操作任务：
+>
+> 通过browser-use库初始化所需组件并执行任务：
+>
+> ```python
+> # 使用LLMConfig获取兼容的LLM
+> llm = self._get_llm(self.llm_config)
+> 
+> # 设置浏览器环境
+> browser_config = BrowserConfig(headless=False, viewport_size={"width": 1280, "height": 800})
+> browser = Browser(config=browser_config)
+> controller = Controller()
+> 
+> # 创建并运行Browser Agent
+> agent = Agent(
+>     task=browser_task,
+>     llm=llm,
+>     browser=browser,
+>     controller=controller,
+>     generate_gif=False,
+>     enable_memory=False
+> )
+> result = await agent.run(max_steps=100)
+> ```
+>
+> 3. 从浏览器操作结果中提取关键信息并构建execute_result
+>
+> ```python
+> # 构建执行结果
+> execute_result = {
+>     "browser_use_result": {
+>         "final_result": result.get("final_result", ""),
+>         "urls_visited": result.get("urls", []),
+>         "content_count": len(result.get("extracted_content", [])),
+>     }
+> }
+> step_state.update_execute_result(execute_result)
+> ```
+>
+> 构建结果摘要用于状态更新：
+>
+> ```python
+> # 构建摘要信息
+> summary = self._build_result_summary(result)
+> # 包含访问的URL数量、提取的内容数量等关键信息
+> ```
+
+
 
 **其他状态同步：**
 
-> 1. 更新agent_step中当前step状态：
->    execute开始执行时更新状态为 “running”，完成时更新为 “finished”，失败时更新为 “failed”
->
-> 2. 在当前step.execute_result中记录工具解析结果：
->
->    ```python
->    execute_result = {  
->        "browser_use_result": {  
->            "final_result": result.get("final_result", ""),  
->            "urls_visited": result.get("urls", []),  
->            "content_count": len(result.get("extracted_content", [])),  
->        }  
->    }  
->    step_state.update_execute_result(execute_result)  
->    ```
->
-> 3. 更新stage_state.every_agent_state中自己的状态：
->
->    通过`update_stage_agent_state`字段指导sync_state更新，
->
->    browser use顺利完成时`update_agent_situation`更新为 ”working“，失败时更新为 “failed”
->
->    ```python
->    execute_output["update_stage_agent_state"] = {
->        "task_id": task_id,
->        "stage_id": stage_id,
->        "agent_id": agent_state["agent_id"],
->        "state": update_agent_situation,
->    }
->    ```
->
-> 4. 添加步骤完成情况到task_state的共享消息池：
->
->    通过`send_shared_message`字段指导sync_state更新，
->
->    process_message顺利完成时`shared_step_situation`更新为 ”finished“，失败时更新为 “failed”
->
->    ```python
->    execute_output["send_shared_message"] = {  
->        "agent_id": agent_state["agent_id"],  
->        "role": agent_state["role"],  
->        "stage_id": stage_id,  
->        "content": f"执行browser_use步骤: {shared_step_situation}"  
->    }  
->    ```
+1. 更新agent_step中当前step状态：
+   execute开始执行时更新状态为 “running”，完成时更新为 “finished”，失败时更新为 “failed”
 
+```python
+# 执行开始时
+agent_state["agent_step"].update_step_status(step_id, "running")
 
+# 执行成功时
+agent_state["agent_step"].update_step_status(step_id, "finished")
+
+# 执行失败时
+agent_state["agent_step"].update_step_status(step_id, "failed")
+```
+
+2. 在当前step.execute_result中记录工具解析结果：
+
+```python
+execute_result = {  
+    "browser_use_result": {  
+        "final_result": result.get("final_result", ""),  
+        "urls_visited": result.get("urls", []),  
+        "content_count": len(result.get("extracted_content", [])),  
+    }  
+}  
+step_state.update_execute_result(execute_result)  
+# 失败时记录错误信息
+execute_result = {"browser_use_error": error_msg}
+step_state.update_execute_result(execute_result)
+```
+
+3. 更新stage_state.every_agent_state中自己的状态：
+
+通过`update_stage_agent_state`字段指导sync_state更新，
+
+browser use顺利完成时`update_agent_situation`更新为 ”working“，失败时更新为 “failed”
+
+```python
+execute_output["update_stage_agent_state"] = {
+    "task_id": task_id,
+    "stage_id": stage_id,
+    "agent_id": agent_state["agent_id"],
+    "state": update_agent_situation,
+}
+```
+
+4. 添加步骤完成情况到task_state的共享消息池：
+
+通过`send_shared_message`字段指导sync_state更新，browser_use操作结果会包含摘要信息（如访问网站数量、提取内容数量等）
+
+```python
+# 成功情况下的共享消息
+execute_output["send_shared_message"] = {
+    "agent_id": agent_state["agent_id"],
+    "role": agent_state["role"],
+    "stage_id": stage_id,
+    "content": f"执行browser_use步骤: 完成: {summary}"
+}
+
+# 失败情况下的共享消息
+execute_output["send_shared_message"] = {
+    "agent_id": agent_state["agent_id"],
+    "role": agent_state["role"],
+    "stage_id": stage_id,
+    "content": f"执行browser_use步骤: 失败: {error_msg[:100]}"
+}
+```
 
 
 
