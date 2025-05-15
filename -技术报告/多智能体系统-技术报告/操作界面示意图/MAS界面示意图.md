@@ -489,7 +489,7 @@ GET /api/states?type=agent
 
 元素`F`纵向排列与`E3`内：
 
-`F`的颜色取决于该Agent的状态：idle 灰色，working 黄色，finished 绿色，failed 红色
+`F`的颜色取决于该Agent的状态（**Agent在这个阶段的状态，不是全局状态**）：idle 灰色，working 黄色，finished 绿色，failed 红色
 
 `F`填充Agent角色和姓名组合而成的字符串：
 
@@ -984,11 +984,17 @@ Step执行器 executor：从步骤状态中获取 `executor (str)` 字段
 
 鼠标悬停时显示”完整信息“字样
 
-鼠标点击元素`E4`时弹出完整Agent信息[T4 Step完整信息](#Step)
+鼠标点击元素`E4`时弹出完整Step信息[T4 Step完整信息](#Step)
 
 
 
 
+
+## B2 次要工作区-说明（TODO 暂未实现）
+
+次要工作区的目的可能是在主要工作区监控状态的同时依然能够操作人类操作端发起与Agent的对话，以干涉/协作/影响任务进行。
+
+**TODO：人类操作端暂未实现，次要工作区暂时占位**
 
 
 
@@ -998,21 +1004,29 @@ Step执行器 executor：从步骤状态中获取 `executor (str)` 字段
 
 在许多场合下，点击元素会弹出其代表状态的完整信息的弹窗。本小节介绍弹窗的具体内容。
 
-以下内容均在主要工作区`B1`以独立容器窗口（弹窗）的形式呈现。这里首先介绍完整信息窗台弹窗的通用功能：
+以下内容均在主要工作区`B1`以独立容器窗口（弹窗）的形式呈现。这里首先介绍完整信息窗台**弹窗的通用功能**：
 
 <img src="./asset/完整信息弹窗.jpg" alt="完整信息弹窗" style="zoom:13%;" />
 
+图注：完整信息弹窗。其中`C0`表示该弹窗展示的状态类别，`K1`,`K2`,`K3`为窗口功能按钮。`C1`,`C2`,`C3`,`C4`等为内容栏`D`的选项，选择不同的`C1-C4`按钮，则元素`D`呈现相应不同的内容。
+
+关于`C1-C4`与`D`的说明，会在各种不同的状态小节中详细介绍，每种状态需要呈现的`C1-C4`与`D`内容各异。
 
 
 
+#### C0 状态类别与多个窗口合并
 
-#### C0 多个窗口合并
+**呈现方式：**
+
+元素`C0`用于标明该窗口显示的是什么类别的状态，填充字符串：
+
+Task，Stage，Agent，Step
+
+**交互功能：**
 
 当有多个相同属性的窗口时，（例如都是Task，或都是Agent）。则可以进行窗口合并。
 
-**具体方式：**
-
-拖拽元素`C0`到目标窗口的上边栏。
+具体方式：拖拽元素`C0`到目标窗口的上边栏。
 
 ![完整信息弹窗_窗口合并2](./asset/完整信息弹窗_窗口合并2.jpg)
 
@@ -1051,10 +1065,7 @@ Step执行器 executor：从步骤状态中获取 `executor (str)` 字段
 
 
 
-
-
-
-
+------
 
 <a id="Task"></a>
 
@@ -1062,13 +1073,9 @@ Step执行器 executor：从步骤状态中获取 `executor (str)` 字段
 
 
 
-
-
-
-
 #### C1 属性
 
-在属性一栏中展示：
+在`C1`属性一栏时元素`D`展示：
 
 - task_id：任务ID
 - task_name：一个任务简介的名称
@@ -1076,21 +1083,161 @@ Step执行器 executor：从步骤状态中获取 `executor (str)` 字段
 - task_manager：任务管理者Agent ID
 - task_group：任务群组，包含所有参与这个任务的Agent ID
 
+<img src="./asset/完整信息弹窗_Task_C1属性.jpg" alt="完整信息弹窗_Task_C1属性" style="zoom:13%;" />
+
+图注：`Task-C1`执行一栏呈现两个元素，`D1`元素文字展示Task基本信息，`D2`元素展示参与任务的Agent。
+
+**呈现方式：**
+
+- 元素`D1`
+
+task_id，task_name，task_intention 在元素`D1`中集中显示，以字符串形式呈现。
+
+```markdown
+Task ID: <task_id>
+Task Name: <task_name>
+Task Intention: 
+<task_intention>
+```
+
+- 元素`D2`
+
+task_manager，task_group在元素`D2`中展示。
+
+任务群组task_group获取到包含agent_id的列表。该任务群组的每个Agent都以一个块（元素`E`）的形式呈现。管理Agent用特殊描边标明。
+
+方块上显示文字：
+
+```markdown
+[<role>] <name>
+```
+
+方块颜色随着Agent的状态（`working_state`）变化：idle 灰色，working 浅绿色，waiting 浅黄色
+
+
+
+**数据来源：**
+
+- 直接获取
+
+直接调用Task状态查询API获取task详细信息
+
+- 间接获取
+
+已知`agent_id`，调用Agent状态查询API获取agent详细信息
+
+
+
+**交互功能：**
+
+元素`D1`允许复制
+
+鼠标双击元素`E`时弹出对应完整Agent信息[T4 Agent完整信息](#Agent)
+
+
 
 
 
 #### C2 执行
 
-选择C2执行一栏中展示：
+选择`C2`执行一栏中元素`D`展示：
+
+- execution_state 当前任务的执行状态，"init"、"running"、"finished"、"failed"
+- stage_list 当前任务下所有阶段的列表
+- task_summary 任务完成后的总结
+
+<img src="./asset/完整信息弹窗_Task_C2执行.jpg" alt="完整信息弹窗_Task_C2执行" style="zoom:13%;" />
+
+图注：`Task-C2`执行一栏展示两个元素。D1元素展示任务下的阶段情况，D2元素文字展示任务状态和任务总结。
+
+**呈现方式：**
+
+- 元素`D1`
+
+展示`stage_list`（包含stage_id的列表）所对应的阶段，每个阶段（元素`E`）默认以竖条纯色条展示，颜色取决于对应阶段的`execution_state`：init 灰色，running 深绿色，finished 浅绿色，failed 红色。
+
+当鼠标停留在元素`E`上时，该元素展开，并文字显示对应阶段的`stage_intention`阶段意图字段内容。
+
+
+
+- 元素`D2`
+
+文字展示 execution_state 和 task_summary  内容：
+
+```markdown
+Execution State: <execution_state>
+Task Summary:
+<task_summary>
+```
+
+
+
+**数据来源：**
+
+- 直接获取
+
+直接调用Task状态查询API获取task详细信息
+
+- 间接获取
+
+已知`stage_id`，调用Stage状态查询API获取stage详细信息
+
+**交互功能：**
+
+当鼠标停留在元素`E`上时，该元素展开，并文字显示对应阶段的`stage_intention`阶段意图字段内容。
+
+鼠标双击元素`E`时弹出对应完整Stage信息[T2 Stage完整信息](#Stage)
+
+
+
+#### C3 通讯
+
+选择`C3`执行一栏中元素`D`展示：
 
 - shared_message_pool 任务群组共享消息池
 
+<img src="./asset/完整信息弹窗_Task_C3通讯.jpg" alt="完整信息弹窗_Task_C3通讯" style="zoom:13%;" />
+
+图注：`Task-C3`通讯一栏展示一个元素。呈现全部共享消息池内容。
+
+**呈现方式：**
+
+shared_message_pool 内容 是一个包含字典的列表，每个字典代表一条消息：
+
+```python
+{"agent_id": str,
+ "role": str,
+ "stage_id": str,
+ "content": str，}
+```
+
+在元素`D`中文字展示 shared_message_pool  内容：
+
+```markdown
+[<role>] <name> | <content>
+[<role>] <name> | <content>
+...
+```
+
+**数据来源：**
+
+- 直接获取
+
+直接调用Task状态查询API获取task详细信息
+
+- 间接获取
+
+已知`agent_id`，调用Agent状态查询API获取agent详细信息
+
+**交互功能：**
+
+允许复制
 
 
 
-C3
 
 
+------
 
 <a id="Stage"></a>
 
@@ -1098,11 +1245,153 @@ C3
 
 
 
+#### C1 属性
+
+选择`C1`属性一栏时，元素`D`展示：
+
+- task_id
+- stage_id
+
+- execution_state 阶段的执行状态
+- stage_intention 阶段意图
+
+<img src="./asset/完整信息弹窗_Stage_C1属性.jpg" alt="完整信息弹窗_Stage_C1属性" style="zoom:13%;" />
+
+图注：`Stage-C1`属性一栏展示一个元素。呈现阶段执行状态和阶段意图的文本信息。
+
+**呈现方式：**
+
+task_id，stage_id，execution_state ，stage_intention 在元素`D`中集中显示，以字符串形式呈现。
+
+```markdown
+Task ID: <task_id>
+Stage ID: <stage_id>
+Execution State: <execution_state>
+Stage Intention: 
+<stage_intention>
+```
+
+**数据来源：**
+
+直接调用Stage状态查询API获取stage详细信息
+
+**交互功能：**
+
+允许复制
+
+
+
+#### C2 协作
+
+选择`C2`属性一栏时，元素`D`展示：
+
+- every_agent_state  (Dict[<agent_id>, <agent_state>])：
+
+  涉及到的每个Agent在这个阶段的状态
+
+- agent_allocation (Dict[<agent_id>, <agent_stage_goal>]：
+
+  阶段中Agent的分配情况，key为Agent ID，value为Agent在这个阶段职责的详细说明。
+
+<img src="./asset/完整信息弹窗_Stage_C2协作.jpg" alt="完整信息弹窗_Stage_C2协作" style="zoom:13%;" />
+
+图注：`Stage-C2`协作一栏展示两种。每一行代表一个Agent，`D1`展示Agent在这个阶段的状态（不是Agent自身状态），`D2`提供Agent协作目标的文本说明。
+
+**呈现方式：**
+
+在`D`中每一行代表一个Agent，其中左侧`D1`为Agent状态指示灯，`D2`为展示该Agent协作目标文本说明。
+
+
+
+元素`D1`为竖状长条指示灯，**表示这个阶段的状态，不是全局状态**。颜色随着`every_agent_state`变化：idle 灰色，working 黄色，finished 绿色，failed 红色
+
+元素`D2`文本展示Agent的角色，名字，和其被分配的Agent目标（agent_allocation字典以<agent_id>为key，以<agent_stage_goal>为value）：
+
+```markdown
+[<role>] <name> ： <agent_stage_goal>
+```
+
+**数据来源：**
+
+- 直接获取
+
+直接调用Stage状态查询API获取stage详细信息
+
+- 间接获取
+
+已知`agent_id`，调用Agent状态查询API获取agent详细信息
+
+**交互功能：**
+
+`D2`允许复制
+
+鼠标双击元素`D1`时弹出对应完整Agent信息[T4 Agent完整信息](#Agent)
+
+
+
+#### C3 总结
+
+选择`C3`属性一栏时，元素`D`展示：
+
+- completion_summary (Dict[<agent_id>, <completion_summary>]): 
+
+  阶段中每个Agent的完成情况
+
+<img src="./asset/完整信息弹窗_Stage_C3总结.jpg" alt="完整信息弹窗_Stage_C3总结" style="zoom:13%;" />
+
+图注：`Stage-C3`协作一栏展示两种。每一行代表一个Agent，`D1`展示Agent在这个阶段的状态（不是Agent自身状态），`D2`提供Agent在这个阶段的完成目标的总结。
+
+**呈现方式：**
+
+在`D`中每一行代表一个Agent，其中左侧`D1`为Agent状态指示灯，`D2`为展示该Agent完成目标总结的文本说明
+
+
+
+元素`D1`为竖状长条指示灯，**表示这个阶段的状态，不是全局状态**。颜色随着`every_agent_state`变化：idle 灰色，working 黄色，finished 绿色，failed 红色
+
+元素`D2`文本展示Agent的角色，名字，和其被分配的Agent目标（completion_summary字典以<agent_id>为key，以<completion_summary>为value）：
+
+```markdown
+[<role>] <name> ： <completion_summary>
+```
+
+**数据来源：**
+
+- 直接获取
+
+直接调用Stage状态查询API获取stage详细信息
+
+- 间接获取
+
+已知`agent_id`，调用Agent状态查询API获取agent详细信息
+
+**交互功能：**
+
+`D2`允许复制
+
+鼠标双击元素`D1`时弹出对应完整Agent信息[T4 Agent完整信息](#Agent)
+
+
+
+
+
+------
+
 <a id="Agent"></a>
 
 ### T3 Agent完整信息
 
 
+
+
+
+
+
+
+
+
+
+------
 
 <a id="Step"></a>
 
