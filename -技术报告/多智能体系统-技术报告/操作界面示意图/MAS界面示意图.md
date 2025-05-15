@@ -1194,13 +1194,23 @@ Task Summary:
 
 选择`C3`执行一栏中元素`D`展示：
 
+- communication_queue 当前未分发消息的通讯队列
+
 - shared_message_pool 任务群组共享消息池
 
 <img src="./asset/完整信息弹窗_Task_C3通讯.jpg" alt="完整信息弹窗_Task_C3通讯" style="zoom:13%;" />
 
-图注：`Task-C3`通讯一栏展示一个元素。呈现全部共享消息池内容。
+图注：`Task-C3`通讯一栏展示两个元素。`D1`展示任务下还未被分发的通讯数量，`D`呈现全部共享消息池内容。
 
 **呈现方式：**
+
+元素`D1`：
+
+元素`D1`为元素`D`右上角的一个固定位置，当元素`D`页面上下滑动时，依然不改变`D1`位置。用于展示`communication_queue`字段内容，填充字符串。
+
+
+
+元素`D`：
 
 shared_message_pool 内容 是一个包含字典的列表，每个字典代表一条消息：
 
@@ -1325,7 +1335,7 @@ Stage Intention:
 
 `D2`允许复制
 
-鼠标双击元素`D1`时弹出对应完整Agent信息[T4 Agent完整信息](#Agent)
+鼠标双击元素`D1`时弹出对应完整Agent信息[T3 Agent完整信息](#Agent)
 
 
 
@@ -1369,7 +1379,7 @@ Stage Intention:
 
 `D2`允许复制
 
-鼠标双击元素`D1`时弹出对应完整Agent信息[T4 Agent完整信息](#Agent)
+鼠标双击元素`D1`时弹出对应完整Agent信息[T3 Agent完整信息](#Agent)
 
 
 
@@ -1382,6 +1392,149 @@ Stage Intention:
 ### T3 Agent完整信息
 
 
+
+#### C1 属性
+
+选择`C1`属性一栏时，元素`D`展示：
+
+- agent_id 唯一标识符
+- name 名称
+- role 角色
+- profile 角色简介
+- working_state 当前工作状态
+
+<img src="./asset/完整信息弹窗_Agent_C1属性.jpg" alt="完整信息弹窗_Agent_C1属性" style="zoom:13%;" />
+
+图注：`Agent-C1`属性一栏展示两个元素。`D1`展示Agent自身状态，`D`呈现Agent角色，名称，简介等信息
+
+**呈现方式：**
+
+元素`D1`：
+
+一个固定条状指示灯，颜色随`working_state` 变化：idle 灰色, working 绿色, waiting 黄色
+
+元素`D`：
+
+agent_id ，name ，role ，profile 在元素`D`中集中显示，以字符串形式呈现。
+
+```markdown
+Agent ID: <agent_id>
+Name: <name >
+Role: <role >
+Profile: 
+<profile >
+```
+
+**数据来源：**
+
+直接调用Agent状态查询API获取agent详细信息
+
+**交互功能：**
+
+允许复制
+
+
+
+#### C2 执行
+
+选择`C2`执行一栏时，元素`D`展示：
+
+- agent_step  执行步骤：
+
+  ```python
+  "agent_step":{
+  	"step_list": List[Dict] # 包含多个步骤的列表，每个步骤以字典形式存储信息
+  	"todo_list": List(str) # 包含step_id的顺序列表
+  }
+  ```
+
+  其中step_list中每个步骤字典内容：
+
+  ```python
+  {
+      "step_id": str,
+      "step_intention": str,
+      "execution_state": str,
+  }
+  ```
+
+  
+
+<img src="./asset/完整信息弹窗_Agent_C2执行.jpg" alt="完整信息弹窗_Agent_C2执行" style="zoom:13%;" />
+
+图注：`Agent-C2`执行一栏展示一个元素`D`。`D`中展示每个步骤的信息，每个步骤为一个元素`E`。
+
+**呈现方式：**
+
+每一个元素`E`代表一个步骤，其颜色随步骤的`execution_state`变化：init 灰色，pending 黄色，running 深绿色，finished 绿色，failed 红色
+
+
+同时元素`E`填充字符串：
+
+```
+任务名称 [步骤类型] 步骤执行对象
+Step Intention: 步骤意图
+```
+
+```markdown
+<task_name>[<type>]<executor>
+Step Intention: <step_intention>
+```
+
+**数据来源：**
+
+- 直接获取
+
+直接调用Agent状态查询API获取agent详细信息
+
+- 间接获取
+
+已知 `step_id` 调用Step状态查询API获取step详细信息
+
+已知 `task_id` 调用Task状态查询API获取task详细信息
+
+**交互功能：**
+
+允许复制
+
+双击元素`E`时弹出对应完整Step信息[T4 Step完整信息](#Step)
+
+
+
+
+
+#### C3 任务
+
+选择`C3`任务一栏时，元素`D`展示：
+
+- working_memory 参与的任务与阶段
+
+  ```python
+  {<task_id>: {<stage_id>: [<step_id>,...],...},...}
+  ```
+
+  
+
+
+
+
+
+#### C4 记忆
+
+选择`C4`记忆一栏时，元素`D`展示：
+
+- persistent_memory 永久持续性记忆
+
+
+
+
+
+#### C5 技能与工具
+
+选择`C5`技能与工具一栏时，元素`D`展示：
+
+- skills 可使用技能权限
+- tools 可使用工具权限
 
 
 
