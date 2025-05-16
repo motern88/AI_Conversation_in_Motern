@@ -74,7 +74,7 @@
 
 
 
-### 1. 显示任务状态
+### A1. 显示任务状态
 
 当点击控制边栏-任务状态（元素`A1`）时，主要工作区`B1`展示MAS所有任务状态。
 
@@ -276,7 +276,7 @@ GET /api/states?type=agent
 
 ------
 
-### 2. 显示阶段状态
+### A2. 显示阶段状态
 
 当点击控制边栏-阶段状态（元素`A2`）时，主要工作区`B1`展示MAS所有阶段状态。
 
@@ -567,7 +567,7 @@ Agent被分配阶段目标：
 
 ------
 
-### 3 显示Agent状态
+### A3 显示Agent状态
 
 当点击控制边栏-Agent状态（元素`A3`）时，主要工作区`B1`展示MAS所有Agent的状态。
 
@@ -755,7 +755,7 @@ AgentStep内容：从Agent状态中获取 `step_list (List[Dict[str,str]])` 字�
 
 ------
 
-### 4 显示步骤状态
+### A4 显示步骤状态
 
 当点击控制边栏-步骤状态（元素`A4`）时，主要工作区`B1`展示MAS所有步骤的状态。
 
@@ -1513,7 +1513,41 @@ Step Intention: <step_intention>
   {<task_id>: {<stage_id>: [<step_id>,...],...},...}
   ```
 
-  
+<img src="./asset/完整信息弹窗_Agent_C3任务.jpg" alt="完整信息弹窗_Agent_C3任务" style="zoom:13%;" />
+
+图注：`Agent-C3`任务一栏展示两种元素`D1`和`E`。展示Agent参与的任务和任务下的阶段。`D1`展示任务信息，`E`展示该任务下的阶段。
+
+**呈现方式：**
+
+`working_memory` 表示该Agent参与哪些任务中的哪些阶段。其涉及到的每个任务都以一个元素`D1`表示，`D1`背景色为蓝紫色，显示`task_name`信息。
+
+`D1`的右侧为该任务下**所有的阶段**，每个阶段用元素`E`表示。其中有本Agent参与的阶段（在`working_memory`中的阶段）使用绿色填充，其余没有本Agent参与的阶段均用灰色填充。
+
+鼠标停留在元素`E`时`E`横向展开显示该阶段的阶段意图`stage_intention`内容；鼠标移开则恢复缩略状态。
+
+
+
+**数据来源：**
+
+- 直接获取
+
+直接调用Agent状态查询API获取agent详细信息
+
+- 间接获取
+
+已知 `task_id` 调用Task状态查询API获取task详细信息
+
+已知 `stage_id` 调用Stage状态查询API获取stage详细信息
+
+**交互功能：**
+
+允许复制
+
+鼠标停留在元素`E`时`E`横向展开显示该阶段的阶段意图`stage_intention`内容
+
+双击元素`E`时弹出对应完整Stage信息[T2 Stage完整信息](#Stage)
+
+双击元素`D1`时弹出对应完整Task信息[T1 Task完整信息](#Task)
 
 
 
@@ -1524,6 +1558,26 @@ Step Intention: <step_intention>
 选择`C4`记忆一栏时，元素`D`展示：
 
 - persistent_memory 永久持续性记忆
+
+<img src="./asset/完整信息弹窗_Agent_C4记忆.jpg" alt="完整信息弹窗_Agent_C4记忆" style="zoom:13%;" />
+
+图注：`Agent-C4`记忆一栏展示一个`D`。展示Agent自身记录的持续性记忆
+
+**呈现方式：**
+
+直接将`persistent_memory`字段内容在元素`D`中显示，存在换行符等，可能需要进行md编译
+
+```markdown
+<persistent_memory>
+```
+
+**数据来源：**
+
+直接调用Agent状态查询API获取agent详细信息
+
+**交互功能：**
+
+允许复制
 
 
 
@@ -1536,9 +1590,23 @@ Step Intention: <step_intention>
 - skills 可使用技能权限
 - tools 可使用工具权限
 
+<img src="./asset/完整信息弹窗_Agent_C5技能与工具.jpg" alt="完整信息弹窗_Agent_C5技能与工具" style="zoom:13%;" />
 
+图注：`Agent-C5`技能与工具一栏中展示两种元素`E1`和`E2`。左侧`E1`展示技能权限，一个`E1`代表一个技能；右侧`E2`展示工具权限，一个`E2`代表一个工具。
 
+**呈现方式：**
 
+`E1`和`E2`中直接显示技能与工具的名字，例如“planning”，“reflection”
+
+`E1`技能呈浅绿色，`E2`呈浅蓝色
+
+**数据来源：**
+
+直接调用Agent状态查询API获取agent详细信息
+
+**交互功能：**
+
+双击元素`E1`或`E2`时弹出对应完整技能与工具信息[T5 技能与工具说明](#skill_and_tools)
 
 
 
@@ -1553,3 +1621,125 @@ Step Intention: <step_intention>
 
 
 
+#### C1 属性
+
+选择`C1`属性一栏时，元素`D`展示：
+
+- execution_state 步骤执行状态
+- task_id 唯一标识符
+- stage_id 唯一标识符
+- agent_id 唯一标识符
+- step_id 唯一标识符
+- type 步骤类型
+- executor 执行该步骤的对象
+- step_intention 步骤的意图
+
+<img src="./asset/完整信息弹窗_Step_C1属性.jpg" alt="完整信息弹窗_Step_C1属性" style="zoom:13%;" />
+
+图注：`Step-C1`属性一栏中展示两种元素`D1`和`D2`。`D1`为状态指示灯，`D2`展示步骤基本属性
+
+**呈现方式：**
+
+元素`E1`：
+
+`E1`颜色由`execution_state`决定：init 灰色，finished 浅绿色，running 深绿色，pending 黄色，failed 红色
+
+元素`E2`：
+
+task_id ，stage_id ，agent_id ，step_id ，type ，executor ，step_intention在元素`D2`中集中显示，以字符串形式呈现。
+
+```markdown
+Task ID：<task_id>
+Stage ID: <stage_id>
+Agent ID: <agent_id>
+Step ID: <step_id>
+Type and Executor: [<type>] <executor>
+Step Intention：
+<step_intention>
+```
+
+**数据来源：**
+
+直接调用Agent状态查询API获取agent详细信息
+
+**交互功能：**
+
+允许复制
+
+
+
+
+
+#### C2 内容
+
+选择`C2`内容一栏时，元素`D`展示：
+
+- text_content 文本内容
+- instruction_content 指令内容
+
+<img src="./asset/完整信息弹窗_Step_C2内容.jpg" alt="完整信息弹窗_Step_C2内容" style="zoom:13%;" />
+
+图注：`Step-C2`内容一栏中展示一个元素`D`。其中展示步骤的文本内容和指令内容。
+
+**呈现方式：**
+
+字符串填充，需要markdown编译
+
+text_content，insruction_content在元素`D`中集中显示，以字符串形式呈现。
+
+```markdown
+|---------Text content----------|
+<text_content>
+|-------Insruction content------|
+<instruction_content>
+```
+
+**数据来源：**
+
+直接调用Agent状态查询API获取agent详细信息
+
+**交互功能：**
+
+允许复制
+
+
+
+#### C3 执行结果
+
+选择`C3`执行结果一栏时，元素`D`展示：
+
+- execute_result (Dict[str, Any])  用来记录LLM输出解析或工具返回的结果
+
+<img src="./asset/完整信息弹窗_Step_C3执行结果.jpg" alt="完整信息弹窗_Step_C3执行结果" style="zoom:13%;" />
+
+图注：`Step-C3`执行结果一栏中展示一个元素`D`。其中展示步骤的执行结果。
+
+**呈现方式：**
+
+字符串填充
+
+execute_result 在元素`D`中集中显示，以字符串形式呈现。
+
+```markdown
+<execute_result>
+```
+
+**数据来源：**
+
+直接调用Agent状态查询API获取agent详细信息
+
+**交互功能：**
+
+允许复制
+
+
+
+
+
+
+
+------
+
+<a id="skill_and_tools"></a>
+
+### T5 技能与工具说明（TODO：暂未实现）
