@@ -2193,7 +2193,9 @@ SyncState接收到消息查询指令后立刻回复消息给Agent，Agent立即�
 
 `ToolDecision` 技能负责调用LLM接收并处理长尾工具的返回结果，并决定下一步该工具的执行（指导指令生成步骤）或是结束长尾工具调用。
 
-长尾工具会在工具步骤执行后将工具返回结果经由 `SyncState` 以消息的方式让 Agent 追加一个 `ToolDecision` 来决策工具否继续调用及如何继续调用。
+长尾工具会在工具步骤执行后通过`execute_output` 指导 `SyncState`生成一个指令消息让 Agent 追加一个 `ToolDecision` 来决策工具否继续调用及如何继续调用。
+
+该工具的历史执行结果由`ToolDecision`主动获取。因此，**工具步骤务必在`execute_result`存放详细调用结果！**
 
 
 
