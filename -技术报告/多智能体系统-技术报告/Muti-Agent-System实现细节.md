@@ -435,6 +435,64 @@ agent_state 是 Agent的重要承载体，它包含了一个Agent的所有状态
 
 
 
+#### 2.4.1 工作记忆的更新
+
+Working Memory （Dict[str, Any]）记录Agent还未完成的任务与阶段
+
+向AgentStep中添加步骤/插入步骤时一般调用 `AgentStep.add_step()` 和 `AgentStep.add_next_step()` 。然而AgentStep自身的方法无法为agent_state追加工作记忆。因此需要上一层调用时追加工作记忆。
+
+
+
+**执行器 `executor_base` ：**
+
+执行器 `Execuotr.add_step()` 和`Execuotr.add_next_step()` 中添加/插入步骤时记录工作记忆：
+
+```python
+agent_state["working_memory"][current_step.task_id][current_step.stage_id,].append(step_state.step_id)  # 记录在工作记忆中
+```
+
+
+
+**Agent `agent_base` :**
+
+Agent基础类 `AgentBase.add_step()` 和 `Execuotr.add_next_step()` 中添加/插入步骤时记录工作记忆：
+
+```python
+self.agent_state["working_memory"][task_id][stage_id].append(step_state.step_id)  # 返回添加的step_id, 记录在工作记忆中
+```
+
+
+
+Agent基础类 `AgentBase.process_message()` 接收到任务管理指令时，会同步记录工作记忆：
+
+1. finish_stage 结束阶段指令
+
+   ```python
+   # 清除相应的工作记忆
+   if task_id in self.agent_state["working_memory"]:
+       if stage_id in self.agent_state["working_memory"][task_id]:
+           del self.agent_state["working_memory"][task_id][stage_id]
+   ```
+
+2. finish_task 结束任务指令
+
+   ```python
+   # 清除相应的工作记忆
+   if task_id in self.agent_state["working_memory"]:
+       del self.agent_state["working_memory"][task_id]
+   ```
+
+3. update_working_memory 直接增加工作记忆指令
+
+   ```python
+   # 指令内容 {"update_working_memory": {"task_id": <task_id>, "stage_id": <stage_id>或None}}
+   task_id = instruction["update_working_memory"]["task_id"]
+   stage_id = instruction["update_working_memory"]["stage_id"]
+   self.agent_state["working_memory"][task_id] = stage_id
+   ```
+
+
+
 
 
 ### 2.4 Step State
@@ -2135,7 +2193,175 @@ SyncState接收到消息查询指令后立刻回复消息给Agent，Agent立即�
 
 
 
-### 3.12 （TODO）
+### 3.12 Tool Decision
+
+**期望作用：**Agent通过Tool Decision处理长尾工具的返回结果，并决定下一步该工具的执行或是结束长尾工具调用。
+
+**说明：**
+
+该技能会调用LLM接收并处理长尾工具的返回结果，并决定下一步该工具的调用的方向（指导指令生成步骤）或是结束长尾工具调用。如果该技能不终止继续调用工具，则该技能能够为Agent追加一个Instruction Generation和一个该工具步骤。
+
+如果工具返回结果需要向LLM确认，并反复多次调用该工具的，这种情况为工具的长尾调用。同一个工具的连续多次调用，需要由LLM不断判断每一步工具使用的方向。
+
+长尾工具会在工具步骤执行后将工具返回结果经由SyncState以消息的方式,让Agent追加一个Tool Decision来决策工具否继续调用及如何继续调用。因此：**Tool Decision技能不允许在Planning/Reflection时由Agent主动使用！！**只能由长尾工具主动触发。
+
+
+
+因此多次调用的长尾工具:
+	以InstructionGeneration开始，以ToolDecision结尾，其中可能包含多次(指令生成-工具执行)的步骤。
+	([I.G.] -> [Tool]) -> [ToolDecision] -> ([I.G.] -> [Tool]) -> [ToolDecision] -> ...
+
+
+
+> 在该技能中，LLM需要获取足够进行决策判断的条件:
+>
+> 1. 工具最初调用的意图
+>
+>    工具最初的调用意图放在和工具的历史调用结果一并获取，executor_base.get_tool_history_prompt
+>
+> 2. 工具当次调用的执行结果
+>
+>    由长尾工具在执行后将工具返回结果通过execute_output传出，使用"need_tool_decision"字段，SyncState会捕获该字段内容。
+>    need_tool_decision字段需要包含：
+>        "task_id" 指导SyncState构造的消息应当存于哪个任务消息队列中
+>        "Stage_id" 保证和Stage相关性，可同一清除
+>        "agent_id" 指导MessageDispatcher从任务消息队列中获取到消息时，应当将消息发送给谁
+>        "tool_name" 指导Agent接收到消息后，追加ToolDecision技能步骤的决策结果应当使用哪个工具
+>    注：工具当次调用结果不需要单独传出，由Tool Decision执行时，获取该工具的历史调用结果一并获取即可。
+>
+> 3. 该长尾工具的历史调用的执行结果和每次调用之间的历史决策
+>
+>    executor_base.get_tool_history_prompt获取。
+>
+> 4. 由工具定义的不同决策对应不同格式指令的说明
+>
+>    Tool Decision不需要知道具体工具指令调用方式，Tool Decision只需要给出下一步工具调用的执行方向。由Instruction Generation根据工具具体提示生成具体工具调用指令。
+
+
+
+- 该Tool Decision的触发经过了MAS中的一个经典循环，执行该技能前有：
+
+  Step（具体工具Tool执行）-> SyncState（生成指令消息）-> MessageDispatcher（分发消息给对应Agent）->  Agent（receive_message处理消息）-> Step（插入一个ToolDecision步骤）
+
+- 执行该技能后，如果Tool Decision继续工具调用则有：
+
+  Step（ToolDecision技能确认工具继续调用，追加接下来的工具调用步骤）-> Step（InstructionGeneration）-> Step（对应Tool）
+
+- 执行该技能后，如果Tool Decision终止工具继续调用则有：
+
+  Step（ToolDecision技能终止工具继续调用）
+
+
+
+**提示词顺序：**
+
+系统 → 角色 → (目标 → 规则) → 记忆
+
+
+
+**具体实现：**
+
+> 1. 组装提示词:
+>     
+> 2. llm调用
+> 3. 解析llm返回的步骤信息，更新AgentStep中的步骤列表
+> 4. 解析llm返回的持续性记忆信息，追加到Agent的持续性记忆中
+> 5. 返回用于指导状态同步的execute_output
+
+
+
+**提示词：**
+
+> 1 MAS系统提示词（# 一级标题）
+>
+> 2 Agent角色:（# 一级标题）
+>
+> ​    2.1 Agent角色背景提示词（## 二级标题）
+>
+> ​    2.2 Agent可使用的工具与技能权限提示词（## 二级标题）
+>
+> 3 tool_decision step:（# 一级标题）
+>
+> ​    3.1 step.step_intention 当前步骤的简要意图
+>
+> ​    3.2 step.text_content 长尾工具提供的返回结果
+>
+> ​    3.3 技能规则提示(tool_decision_config["use_prompt"])
+>
+> 4 该工具的历史执行结果（# 一级标题）
+>
+> 5 持续性记忆:（# 一级标题）
+>
+> ​    5.1 Agent持续性记忆说明提示词（## 二级标题）
+>
+> ​    5.2 Agent持续性记忆内容提示词（## 二级标题）
+
+
+
+**交互行为：**
+
+> 1. 如果继续调用工具，则更新AgentStep中的步骤列表
+>
+>    ```python
+>    self.add_next_step(planned_step, step_id, agent_state)  # 将决策的步骤列表添加到AgentStep中，插队到下一个待执行步骤之前
+>    ```
+>
+> 2. 解析persistent_memory并追加到Agent持续性记忆中
+>
+>    ```python
+>    new_persistent_memory = self.extract_persistent_memory(response)
+>    agent_state["persistent_memory"] += "\n" + new_persistent_memory
+>    ```
+
+
+
+**其他状态同步：**
+
+> 1. 更新agent_step中当前step状态：
+>    execute开始执行时更新状态为 “running”，完成时更新为 “finished”，失败时更新为 “failed”
+>
+> 2. 在当前step.execute_result中记录工具决策结果：
+>
+>    ```python
+>    execute_result = {"tool_decision": tool_decision_step}
+>    step.update_execute_result(execute_result)
+>    ```
+>
+> 3. 更新stage_state.every_agent_state中自己的状态：
+>
+>    通过`update_stage_agent_state`字段指导sync_state更新，
+>
+>    tool_decision顺利完成时`update_agent_situation`更新为 ”working“，失败时更新为 “failed”
+>
+>    ```python
+>    execute_output["update_stage_agent_state"] = {
+>        "task_id": task_id,
+>        "stage_id": stage_id,
+>        "agent_id": agent_state["agent_id"],
+>        "state": update_agent_situation,
+>    }
+>    ```
+>
+> 4. 添加步骤完成情况到task_state的共享消息池：
+>
+>    通过`send_shared_message`字段指导sync_state更新，
+>
+>    tool_decision顺利完成时`shared_step_situation`更新为 ”finished“，失败时更新为 “failed”
+>
+>    ```python
+>    execute_output["send_shared_message"] = {
+>        "agent_id": agent_state["agent_id"],
+>        "role": agent_state["role"],
+>        "stage_id": stage_id,
+>        "content": f"执行Tool Decision步骤:{shared_step_situation}，"
+>    }
+>    ```
+
+
+
+
+
+### 3.13 （TODO）
 
 **期望作用：**
 
@@ -2590,7 +2816,7 @@ md_output.append(f"## 你已有的持续性记忆内容：\n"
 
 
 
-### 5.6 历史step执行结果
+### 5.6 历史步骤执行结果
 
 获取当前Stage下所有历史的step的执行结果，作为提示词
 
@@ -2643,16 +2869,125 @@ for step in planned_step:
 ```python
 [
     {
-        "step_intention": "获取当前时间",
-        "type": "tool",
-        "executor": "time_tool",
-        "text_content": "获取当前时间"
+        "step_intention": str,
+        "type": str,
+        "executor": str,
+        "text_content": str
     },
     ...
 ]
 ```
 
 
+
+### 5.8 插入Step
+
+为agent_step的列表中插入多个Step，插入在下一个待执行step之前。
+
+```python
+self.add_next_step(planned_step, step_id, agent_state)  # 更新AgentStep中的步骤列表，插入在下一个待执行步骤之前
+```
+
+**执行器基类函数名：**add_next_step
+
+**作用：**为agent_step的列表中插入多个Step (插入在下一个待执行的步骤之前)
+
+```python
+# 倒序获取
+for step in reversed(planned_step):
+    # 构造新的StepState
+    step_state = StepState(
+        task_id=current_step.task_id,
+        stage_id=current_step.stage_id,
+        agent_id=current_step.agent_id,
+        step_intention=step["step_intention"],
+        step_type=step["type"],
+        executor=step["executor"],
+        text_content=step["text_content"]
+    )
+    # 插入到AgentStep中
+    agent_step.add_next_step(step_state)
+    # 记录在工作记忆中
+    agent_state["working_memory"][current_step.task_id][current_step.stage_id,].append(step_state.step_id)
+```
+
+接受planned_step格式为`List[Dict[str:str]]`：
+
+```python
+[
+    {
+        "step_intention": str,
+        "type": str,
+        "executor": str,
+        "text_content": str,
+    },
+    ...
+]
+```
+
+
+
+### 5.9 长尾工具的历史调用信息提示词
+
+获取该工具历史执行结果
+
+```python
+md_output.append(f"# 该工具历史的历史信息 tool_history\n")
+history_tools_result = self.get_tool_history_prompt(step_id, agent_state, tool_name)  # 不包含标题的md格式文本
+md_output.append(f"{history_tools_result}\n")
+```
+
+**执行器基类函数名：**get_tool_history_prompt
+
+**作用：**
+
+本方法应用于tool_decision中用于获取该工具的历史执行结果、历史调用决策与最初执行意图。
+
+
+接收tool_name，向前提取当前stage_id下最新的长尾工具连续调用步骤链。根据筛选的连续调用步骤链，结构化组装其提示信息：
+
+- 该工具的历次调用结果
+- 该工具的历次工具决策
+- 该工具最初的执行意图
+
+
+
+为了只获取当前阶段下，正在进行的完整连续长尾工具调用步骤链，而不获取到其他干扰项或先前的长尾工具调用链，执行步骤如下：
+
+1. 获取当前阶段的所有步骤
+
+2. 从后向前遍历所有步骤获取executor来比较，为了避免获取到该阶段下前一段长尾工具的调用：
+
+   从最近一次 [Tool] 开始，尝试向前“恢复”出成对的 [Tool] -> [ToolDecision]，直到不能再恢复。
+
+   2.1 从末尾倒序遍历 steps 找到第一个 Tool（匹配工具名），作为起点
+
+   2.2 从该 Tool 向前寻找最近的 ToolDecision
+
+   ​	（中间允许跳过 InstructionGeneration 和 SendMessage，但如果存在其他步骤则视为非法，终止这轮）
+
+   2.3 一旦找到了 ToolDecision，说明前面是一个完整调用：
+
+   ​	一定会存在 Tool -> ToolDecision 成对的步骤。
+
+   ​        继续寻找 ToolDecision 前的 Tool ，把这一对 Tool -> ToolDecision 都加入结果，
+
+   ​        随后以这一对调用的开头 Tool 为新的起点。
+
+   2.4 在新的 Tool 作为起点，继续重复2.2向前查找，直到中途出现非法步骤
+   	（如遇到不是 tool_decision 又不是 gap 的步骤）
+
+   2.5 如果向前找 Tool 的前一个有效步骤非 ToolDecision 则终止查找。
+
+   ​	（排除 InstructionGeneration 和 SendMessage ）
+
+3. 获取最初工具调用步骤意图
+
+4. 将恢复的历史 Tool / ToolDecision 步骤组装为结构化提示词（Markdown格式）
+
+
+
+> 注：这一段在代码中实现的可读性不高
 
 
 
@@ -2711,7 +3046,53 @@ agent_step.todo_list 是一个queue.Queue()共享队列，用于存放待执行�
 
 
 
-**process_message方法:**
+#### 6.2.1 需要回复的消息
+
+如果消息需要回复 `message["need_reply"]` ，则继续判断消息发送的对方是否等待该消息的回复 `message["waiting"]` ：
+
+- 发送方等待该消息回复
+
+  解析出自己对应的唯一等待ID
+
+  ```python
+  return_waiting_id = message["waiting"][message["receiver"].index(self.agent_state["agent_id"])]
+  ```
+
+  在步骤列表中插入回复消息步骤，在下一个步骤中立即执行该消息的回复：
+
+  ```python
+  self.add_next_step(
+      task_id=message["task_id"],
+      stage_id=message["stage_relative"],  # 可能是no_relative 与阶段无关
+      step_intention=f"回复来自Agent {message['sender_id']}的消息，**消息内容见当前步骤的text_content**",
+      step_type="skill",
+      executor="send_message",
+      text_content=message["message"] + f"\n\n<return_waiting_id>{return_waiting_id}</return_waiting_id>"  # 将消息内容和回应等待ID一起填充
+  )
+  ```
+
+
+
+- 发送方不等待该消息回复
+
+  在步骤列表中追加回复消息步骤
+
+  ```python
+  self.add_step(
+      task_id = message["task_id"],
+      stage_id = message["stage_relative"],  # 可能是no_relative 与阶段无关
+      step_intention = f"回复来自Agent {message['sender_id']}的消息，**消息内容见当前步骤的text_content**",
+      step_type = "skill",
+      executor = "send_message",
+      text_content = message["message"]
+  )
+  ```
+
+
+
+
+
+#### 6.2.2 Process Message
 
 处理不需要回复的消息，会进入该消息处理分支
 
@@ -2728,11 +3109,17 @@ agent_step.todo_list 是一个queue.Queue()共享队列，用于存放待执行�
 解析`message["message"]`中的内容
 
 1. 对于需要LLM理解并消化的消息，添加process_message step
-2. 如果instruction字典包含start_stage的key,则执行start_stage：
+2. 如果instruction字典包含start_stage的key，则执行start_stage：
    当一个任务阶段的所有step都执行完毕后，帮助Agent建立下一个任务阶段的第一个step: planning_step）
-3. 如果instruction字典包含finish_stage的key,则执行清除该stage的所有step并且清除相应working_memory
-4. 如果instruction字典包含finish_task的key,则执行清除该task的所有step并且清除相应working_memory
-5. 如果instruction字典包含update_working_memory的key,则更新Agent的工作记忆
+3. 如果instruction字典包含finish_stage的key，则执行清除该stage的所有step并且清除相应working_memory
+4. 如果instruction字典包含finish_task的key，则执行清除该task的所有step并且清除相应working_memory
+5. 如果instruction字典包含update_working_memory的key，则更新Agent的工作记忆
+
+6. 如果instruction字典包含add_tool_decision的key，插入tool_decision步骤
+
+
+
+
 
 
 
@@ -2740,9 +3127,23 @@ agent_step.todo_list 是一个queue.Queue()共享队列，用于存放待执行�
 
 
 
-### 7.1 LLM Client（TODO）
+### 7.1 LLM Client
+
+LLM API 调用封装类，不直接维护对话历史，而是使用 LLMContext。
+该类实现两种API调用方式：Ollama 和 OpenAI。在不同分支中
+
+调用时使用 `LLMClient.call()` 传入提示词 prompt 和上下文管理器 `LLMContext` 。
 
 
+
+> LLMContext 类负责维护对话历史，包括追加、删除、获取历史等功能。
+>
+> - add_message 追加新的对话记录
+> - remove_last_message 删除最后一条消息
+> - trim_history 仅保留最近 `context_size` 轮对话
+> - set_history 直接替换整个对话历史
+> - get_history 获取当前的对话历史
+> - clear 清空对话历史
 
 
 
