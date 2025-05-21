@@ -220,11 +220,84 @@ class BilliardsSimulation:
 
         pygame.quit()
 
+    def simulate_future_frames(self, balls, frames=10, visualize=False):
+        '''
+        给定初始状态，模拟未来N帧，支持可视化
+        参数：
+            balls:{
+                "ball_id": [x, y, vx, vy],
+                ...
+            }
+            frames: 模拟未来帧数
+            visualize: 是否进行pygame可视化
+        返回：
+            sim_future_balls: {
+                frame_idx: {
+                    "ball_id":[x, y, vx, vy],
+                    ...
+                }
+                ...
+            }
+        '''
+        # 复制初始状态为模拟球
+        sim_balls = {}
+        for ball_id, (x, y, vx, vy) in balls.items():
+            sim_balls[ball_id] = Ball(x, y, vx, vy)
+
+        # 记录轨迹
+        sim_future_balls = {}
+
+        if visualize:
+            sim_screen = pygame.display.set_mode((self.WINDOW_WIDTH, self.WINDOW_HEIGHT))
+            pygame.display.set_caption("未来轨迹模拟")
+            sim_clock = pygame.time.Clock()
+
+        for frame_idx in range(frames):
+            # 每帧状态记录
+            sim_future_balls[frame_idx] = {}
+
+            # 球移动
+            for ball_id, ball in sim_balls.items():
+                ball.move()
+
+            # 处理碰撞
+            self.handle_ball_collisions(list(sim_balls.values()))
+
+            # 记录当前帧所有球状态
+            for ball_id, ball in sim_balls.items():
+                sim_future_balls[frame_idx][ball_id] = [ball.x, ball.y, ball.vx, ball.vy]
+
+            # 可视化
+            if visualize:
+                sim_clock.tick(60)
+                sim_screen.fill((30, 30, 30))
+
+                for ball in sim_balls.values():
+                    ball.draw(sim_screen, self.scale_x, self.scale_y)
+
+                scaled_boundary = [(int(x * self.scale_x), int(y * self.scale_y)) for (x, y) in TABLE_BOUNDARY]
+                pygame.draw.polygon(sim_screen, (0, 100, 0), scaled_boundary, width=5)
+
+                pygame.display.flip()
+
+        return sim_future_balls
+
+
+
 if __name__ == "__main__":
     '''
     运行脚本
+    sim.run()  # 运行随机模拟，用来简易判断是否符合物理规律
+    sim.simulate_future_frames()  # 运行未来轨迹模拟，给定初始状态，模拟未来N帧
+    
     '''
     sim = BilliardsSimulation()
-    sim.run()
 
+    # sim.run()
 
+    init_balls = {
+        "0": [500, 500, 70, 15],
+        "1": [600, 550, -10, -50],
+    }
+    result = sim.simulate_future_frames(init_balls, frames=500, visualize=True)
+    print(result[50]) # 查看第50帧的状态
