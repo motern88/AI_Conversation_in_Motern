@@ -3129,6 +3129,58 @@ agent_step.todo_list 是一个queue.Queue()共享队列，用于存放待执行�
 
 
 
+### 6.3 添加步骤
+
+#### 6.3.1 add_step
+
+为agent_step的列表中添加一个Step
+
+1. 构造一个完整的StepState
+
+```python
+step_state = StepState(...)
+```
+
+2. 追加一个该Step到agent_step中
+
+```python
+self.agent_state["agent_step"].add_step(step_state)
+```
+
+3. 将StepState的id, 记录在工作记忆中
+
+```python
+self.agent_state["working_memory"].setdefault(task_id, {}).setdefault(stage_id, []).append(step_state.step_id)
+```
+
+
+
+#### 6.3.2 add_next_step
+
+为agent_step的列表中插队添加一个Step,将该Step直接添加到下一个要处理的Step之前
+
+1. 构造一个完整的StepState
+
+```python
+step_state = StepState(...)
+```
+
+2. 添加一个该Step到agent_step中,插队到下一个step之前
+
+```python
+self.agent_state["agent_step"].add_next_step(step_state)
+```
+
+3. 将StepState的id, 记录在工作记忆中
+
+```python
+self.agent_state["working_memory"].setdefault(task_id, {}).setdefault(stage_id, []).append(step_state.step_id)
+```
+
+
+
+
+
 ## 7. HumanAgent 人类操作端
 
 人类操作端是实现人类介入 Muti-Agent System 的唯一方式。在MAS中，人类以HumanAgent的形式出现，与之对应的是由LLM驱动的LLM-Agent。人类与LLM-Agent之间的通信与协作均等同于Agent与Agent之间的通信与协作。
