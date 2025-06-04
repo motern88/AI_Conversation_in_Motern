@@ -748,9 +748,10 @@ Planning需要有操作Agent中AgentStep的能力，AgentStep是Agent的执行�
 >
 >    ```python
 >    execute_output["send_shared_message"] = {
+>        "task_id": task_id,
+>        "stage_id": stage_id,
 >        "agent_id": agent_state["agent_id"],
 >        "role": agent_state["role"],
->        "stage_id": stage_id,
 >        "content": f"执行Planning步骤:{shared_step_situation}，"
 >    }
 >    ```
@@ -870,9 +871,10 @@ Reflection需要获取到过去执行步骤的信息，并且具备操作AgentSt
 >
 >    ```python
 >    execute_output["send_shared_message"] = {
+>        "task_id": task_id,
+>        "stage_id": stage_id,
 >        "agent_id": agent_state["agent_id"],
 >        "role": agent_state["role"],
->        "stage_id": stage_id,
 >        "content": f"执行Reflection步骤:{shared_step_situation}，"
 >    }
 >    ```
@@ -1014,9 +1016,10 @@ Summary技能对stage信息的获取来源于第一个步骤Planning_step：
 >
 >    ```python
 >    execute_output["send_shared_message"] = {
+>        "task_id": task_id,
+>        "stage_id": stage_id,
 >        "agent_id": agent_state["agent_id"],
 >        "role": agent_state["role"],
->        "stage_id": stage_id,
 >        "content": f"执行summary步骤:{shared_step_situation}，"
 >    }
 >    ```
@@ -1152,9 +1155,10 @@ Instruction Generation会获取下一个工具step的信息，并具备更新下
 >
 >    ```python
 >    execute_output["send_shared_message"] = {
+>        "task_id": task_id,
+>        "stage_id": stage_id,
 >        "agent_id": agent_state["agent_id"],
 >        "role": agent_state["role"],
->        "stage_id": stage_id,
 >        "content": f"执行instruction_generation步骤:{shared_step_situation}，"
 >    }
 >    ```
@@ -1259,9 +1263,10 @@ Instruction Generation会获取下一个工具step的信息，并具备更新下
 >
 >    ```python
 >    execute_output["send_shared_message"] = {
+>        "task_id": task_id,
+>        "stage_id": stage_id,
 >        "agent_id": agent_state["agent_id"],
 >        "role": agent_state["role"],
->        "stage_id": stage_id,
 >        "content": f"执行think步骤:{shared_step_situation}，"
 >    }
 >    ```
@@ -1364,9 +1369,10 @@ Instruction Generation会获取下一个工具step的信息，并具备更新下
 >
 >    ```python
 >    execute_output["send_shared_message"] = {
+>        "task_id": task_id,
+>        "stage_id": stage_id,
 >        "agent_id": agent_state["agent_id"],
 >        "role": agent_state["role"],
->        "stage_id": stage_id,
 >        "content": f"执行quick_think步骤:{shared_step_situation}，"
 >    }
 >    ```
@@ -1573,9 +1579,10 @@ Send Message 首先需要构建发送对象列表。[<agent_id>, <agent_id>, ...
 >
 >    ```python
 >    execute_output["send_shared_message"] = {
+>        "task_id": task_id,
+>        "stage_id": stage_id,
 >        "agent_id": agent_state["agent_id"],
 >        "role": agent_state["role"],
->        "stage_id": stage_id,
 >        "content": f"执行Send Message步骤:{shared_step_situation}，"
 >    }
 >    ```
@@ -1703,9 +1710,10 @@ Message内容可能包含md标题，为了防止与其他提示的md标题形成
 >
 >    ```python
 >    execute_output["send_shared_message"] = {
+>        "task_id": task_id,
+>        "stage_id": stage_id,
 >        "agent_id": agent_state["agent_id"],
 >        "role": agent_state["role"],
->        "stage_id": stage_id,
 >        "content": f"执行process_message步骤:{shared_step_situation}，"
 >    }
 >    ```
@@ -1867,9 +1875,10 @@ Task Manager会参考自身历史步骤信息（前面步骤获取任务信息�
 >
 >    ```python
 >    execute_output["send_shared_message"] = {
+>        "task_id": task_id,
+>        "stage_id": stage_id,
 >        "agent_id": agent_state["agent_id"],
 >        "role": agent_state["role"],
->        "stage_id": stage_id,
 >        "content": f"执行task_manager步骤:{shared_step_situation}，"
 >    }
 >    ```
@@ -2007,9 +2016,10 @@ Agent Manager会参考自身历史步骤信息（前面步骤获取相关Agent�
 >
 >    ```python
 >    execute_output["send_shared_message"] = {
+>        "task_id": task_id,
+>        "stage_id": stage_id,
 >        "agent_id": agent_state["agent_id"],
 >        "role": agent_state["role"],
->        "stage_id": stage_id,
 >        "content": f"执行agent_manager步骤:{shared_step_situation}，"
 >    }
 >    ```
@@ -2198,9 +2208,10 @@ SyncState接收到消息查询指令后立刻回复消息给Agent，Agent立即�
 >
 >    ```python
 >    execute_output["send_shared_message"] = {
+>        "task_id": task_id,
+>        "stage_id": stage_id,
 >        "agent_id": agent_state["agent_id"],
 >        "role": agent_state["role"],
->        "stage_id": stage_id,
 >        "content": f"执行Ask Info步骤:{shared_step_situation}，"
 >    }
 >    ```
@@ -2368,9 +2379,10 @@ SyncState接收到消息查询指令后立刻回复消息给Agent，Agent立即�
 >
 >    ```python
 >    execute_output["send_shared_message"] = {
+>        "task_id": task_id,
+>        "stage_id": stage_id,
 >        "agent_id": agent_state["agent_id"],
 >        "role": agent_state["role"],
->        "stage_id": stage_id,
 >        "content": f"执行Tool Decision步骤:{shared_step_situation}，"
 >    }
 >    ```
@@ -2659,17 +2671,19 @@ execute_output["update_stage_agent_state"] = {
 ```python
 # 成功情况下的共享消息
 execute_output["send_shared_message"] = {
+    "task_id": task_id,
+    "stage_id": stage_id,
     "agent_id": agent_state["agent_id"],
     "role": agent_state["role"],
-    "stage_id": stage_id,
     "content": f"执行browser_use步骤: 完成: {summary}"
 }
 
 # 失败情况下的共享消息
 execute_output["send_shared_message"] = {
+    "task_id": task_id,
+    "stage_id": stage_id,
     "agent_id": agent_state["agent_id"],
     "role": agent_state["role"],
-    "stage_id": stage_id,
     "content": f"执行browser_use步骤: 失败: {error_msg[:100]}"
 }
 ```
