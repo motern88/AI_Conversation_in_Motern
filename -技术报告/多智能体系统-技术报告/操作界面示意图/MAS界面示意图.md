@@ -575,7 +575,7 @@ Agent被分配阶段目标：
 
 ![Agent状态](./asset/Agent状态.jpg)
 
-图注：Agent状态展示。每个Agent State以一个独立的元素容器`C`显示在主要工作区`B1`中。容器`C`的背景色保持和工作区背景一致，避免干扰到其内部信息展示。
+图注：Agent状态展示。每个Agent State以一个独立的元素容器`C`显示在主要工作区`B1`中。容器`C`的背景色保持和工作区背景一致，避免干扰到其内部信息展示。**注：如果是人类操作端HumanAgent卡片，则用红色细线描边**
 
 
 
@@ -1569,7 +1569,7 @@ Step Intention: <step_intention>
 
 **呈现方式：**
 
-直接将`persistent_memory`字段内容在元素`D`中显示，存在换行符等，可能需要进行md编译
+直接将`persistent_memory`字段内容在元素`D`中显示，存在换行符等，需要进行markdown编译
 
 ```markdown
 <persistent_memory>
@@ -1587,7 +1587,7 @@ Step Intention: <step_intention>
 
 
 
-#### C5 技能与工具
+#### C5 技能与工具 
 
 选择`C5`技能与工具一栏时，元素`D`展示：
 
@@ -1611,6 +1611,119 @@ Step Intention: <step_intention>
 **交互功能：**
 
 双击元素`E1`或`E2`时弹出对应完整技能与工具信息[T5 技能与工具说明](#skill_and_tools)
+
+
+
+
+
+#### C6 对话消息（HumanAgent）（TODO 群聊消息暂未实现）
+
+> Agent有两种类别，由语言模型驱动的LLM-Agent和人类操作端HumanAgent。
+> 可以从MutiAgent System的状态监控器获取ID区分：
+>
+> LLM-Agent获取到的状态名称一般为：AgentBaseXXXXXXXXXXXXX
+> HumanAgent获取到的状态名称一般为：HumanAgentXXXXXXXXXXXX
+>
+> 仅有HumanAgent类别拥有 `C6` 的信息展示
+
+选择`C5`技能与工具一栏时，元素`D`展示：
+
+- global_messages 人类操作端的全局消息
+- conversation_privates 私聊消息
+- conversation_groups 群聊消息
+
+<img src="./asset/完整信息弹窗_Agent_C6对话消息.jpg" alt="完整信息弹窗_Agent_C6对话消息" style="zoom:13%;" />
+
+图注：`Agent-C6`对话消息一栏中展示两种元素`D1`和`E`。上方`D1`展示最新的全局消息，下方堆叠的多个`E`元素，每个代表一个聊天组（其中私聊聊天组呈绿色背景，群聊聊天组呈黄色背景）。
+
+**呈现方式：**
+
+元素`D1`：
+
+以字符串的形式呈现 global_messages 列表中最后一个字符串。（只显示最新消息）
+
+元素`E`：
+
+每个元素`E`代表一个对话组，如果是私聊对话组，则背景呈浅绿色；如果是群聊对话组，则背景呈浅黄色。
+
+如果是私聊对话组，则元素`E`上呈现对应聊天对象的Agent名称和Agent角色信息：
+
+```
+名称
+[角色]
+```
+
+```markdown
+<name>
+[<role>]
+```
+
+如果是群聊对话组，则暂不显示**（TODO 群聊对话暂未实现）**
+
+
+
+**数据来源：**
+
+- 直接获取
+
+直接调用Agent状态查询API获取agent详细信息，如果该Agent状态属于HumanAgent，则HumanAgent会存在 conversation_pool 字段，该字段下：
+
+```python
+agent_state["conversation_pool"] = {
+    "conversation_groups": List[Dict], # 所有群聊对话组
+    "conversation_privates": Dict[str,List],  # 以agent_id为key的所有私聊对话组
+    "global_messages": List[str],  # 全局消息, 用于提醒该人类操作员自己的信息
+}
+```
+
+其中 conversation_privates 格式如下：
+
+```python
+# 每个 <conversation_private> 是一个字典，包含与其他Agent的私聊对话信息：
+"agent_id":[
+    {
+        "sender_id": str,  # 发送者Agent ID
+        "content": str,  # 消息内容
+        "stage_relative": str,  # 如果消息与任务阶段相关，则填写对应阶段Stage ID，否则为"no_relative"
+        "timestamp": str,  # 消息发送时间戳
+        "need_reply": bool,  # 是否需要回复
+        "waiting": bool,  # 如果需要回复，发起方是否正在等待该消息回复
+        "return_waiting_id": Optional[str], # 如果发起方正在等待回复，那么需要返回的唯一等待标识ID
+    }
+]
+```
+
+其中 conversation_groups 格式如下：**（TODO 暂未实现）**
+
+```python
+
+```
+
+
+
+- 间接获取
+
+已知 `agent_id` 调用Agent状态查询API获取agent详细信息
+
+
+
+**交互功能：**
+
+双击元素`E`弹出对应完整消息记录[T6 消息记录](#conversation)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -1747,3 +1860,141 @@ execute_result 在元素`D`中集中显示，以字符串形式呈现。
 <a id="skill_and_tools"></a>
 
 ### T5 技能与工具说明（TODO：暂未实现）
+
+
+
+
+
+
+
+------
+
+<a id="conversation"></a>
+
+### T6 消息记录 （TODO：群聊消息未实现）
+
+对话消息聊天窗口如下图所示：
+
+<img src="./asset/完整信息弹窗_对话消息.jpg" alt="完整信息弹窗_对话消息" style="zoom:13%;" />
+
+图注：完整对话窗口执行结果一栏中展示三个元素：`D1` 展示所有历史对话信息；`D2` 展示所有参与该对话的Agent，其中每个Agent用一个元素 `E` 表示；`D3` 为聊天输入框。
+
+
+
+#### D1 历史对话信息
+
+**呈现方式：**
+
+字符串填充，每一条对话以以下形式呈现：
+
+```markdown
+发送时间 [角色]名字  >  消息内容
+```
+
+```markdown
+<timestamp> [<role>]<name>  >  <content>
+```
+
+**数据来源：**
+
+- 直接获取
+
+调用Agent状态查询API获取agent详细信息中，HumanAgent的agent_state["conversation_pool"]
+
+对于私聊消息["conversation_privates"]，其中：
+
+```python
+"agent_id":[
+    {
+        "sender_id": str,  # 发送者Agent ID
+        "content": str,  # 消息内容
+        "stage_relative": str,  # 如果消息与任务阶段相关，则填写对应阶段Stage ID，否则为"no_relative"
+        "timestamp": str,  # 消息发送时间戳
+        "need_reply": bool,  # 是否需要回复
+        "waiting": bool,  # 如果需要回复，发起方是否正在等待该消息回复
+        "return_waiting_id": Optional[str], # 如果发起方正在等待回复，那么需要返回的唯一等待标识ID
+    },
+    ...
+]
+```
+
+对于群聊消息["conversation_group"]，其中：**（TODO 暂未实现群聊消息）**
+
+```python
+
+```
+
+- 间接获取
+
+已知 `agent_id` 调用Agent状态查询API获取agent详细信息
+
+**交互功能：**
+
+允许复制
+
+
+
+#### D2 聊天参与者 （TODO Agent头像功能暂未实现）
+
+在元素`D2`中，每个元素`E`表示一个聊天参与者。
+
+私聊中应当只有对方Agent和自己两个人。如果是群聊，则应当包含每一个参与Agent。
+
+**呈现方式：**
+
+元素`E`展示Agent头像
+
+如果没有头像，则默认展示Agent名字的首字符。
+
+**数据来源：**
+
+直接调用Agent状态查询API获取agent详细信息
+
+**交互功能：**
+
+鼠标双击元素`D1`时弹出对应完整Agent信息[T3 Agent完整信息](#Agent)
+
+
+
+#### D3 聊天输入框 （TODO 接口暂未实现）
+
+暂未实现聊天输入发送消息的接口
+
+**呈现方式：**
+
+直接呈现用户输入的字符串
+
+**数据来源：**
+
+用户输入
+
+**交互功能：**
+
+（暂未实现发送消息的前端接口）
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
