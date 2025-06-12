@@ -3235,7 +3235,7 @@ Human-Agent需要同时兼顾实际使用与向人类展示，因此Human-Agent�
 ```python
 agent_state["conversation_pool"] = {
     "conversation_groups": [<conversation_group>, ...],  # List[Dict] 记录所有群聊对话组
-    "conversation_privates": {"agent_id": <conversation_private>, ...},  # Dict[str,Dict]  记录所有私聊对话组
+    "conversation_privates": {"agent_id": <conversation_private>, ...},  # Dict[str,List]  记录所有私聊对话组
     "global_messages": [str, ...],  # List[str] 用于通知人类操作员的全局重要消息
 }
 ```
