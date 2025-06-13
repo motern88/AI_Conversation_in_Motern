@@ -1557,7 +1557,7 @@ Step Intention: <step_intention>
 
 
 
-#### C4 记忆
+#### C4 记忆（TODO 持续性记忆格式修改了）
 
 选择`C4`记忆一栏时，元素`D`展示：
 
@@ -1994,6 +1994,12 @@ execute_result 在元素`D`中集中显示，以字符串形式呈现。
 
 ## 接口1：获取指定类型的所有状态
 
+端口
+
+```python
+5000
+```
+
 URL
 
 ```python
@@ -2022,6 +2028,12 @@ GET /api/states?type=xxx
 
 ## 接口2：查询指定 ID 的状态详情
 
+端口
+
+```python
+5000
+```
+
 URL
 
 ```python
@@ -2042,9 +2054,29 @@ GET /api/state/<state_id>
 
 
 
+## 接口3：人类操作端发送消息
 
+端口
 
+```python
+5001
+```
 
+URL
+
+```python
+POST /api/send_message
+```
+
+| 参数名           | 描述                                                         | 示例                                                         | 格式      |
+| ---------------- | ------------------------------------------------------------ | ------------------------------------------------------------ | --------- |
+| `human_agent_id` | Agent ID                                                     | `74f5da18-fff9-4bef-b13e-0846f86f6f19`                       | str       |
+| `task_id`        | 任务ID                                                       | `082db0b7-86f9-4dd4-a56d-e27f271615e0`                       | str       |
+| `receiver`       | 包含接收者ID的列表                                           | `[286a854e-7404-4dad-b1c3-08ff6ab36e67,40da361c-cc6a-4b8c-9478-9066e67c0ff5,...]` | List[str] |
+| `content`        | 消息内容                                                     | `你好`                                                       | str       |
+| `stage_relative` | 如果消息与任务阶段相关，则填写对应阶段Stage ID，否则为"no_relative" | `61f36019-8a47-4a6c-b376-9dc6eecd15d8`                       | str       |
+| `need_reply`     | 是否需要回复                                                 | `True`                                                       | bool      |
+| `waiting`        | 是否等待其回复/需要其立即回复                                | `False`                                                      | bool      |
 
 
 

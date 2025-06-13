@@ -205,8 +205,9 @@ Agent被实例化时需要初始化自己的 agent_state, agent_state 会被持�
         以任务视角存储 Agent 的工作记忆。  
         结构为 `{<task_id>: {<stage_id>: [<step_id>, ...], ...}, ...}`  
         记录未完成的任务、阶段和步骤，不用于长期记忆。  
-    persistent_memory (str): 永久追加的精简记忆，用于记录Agent的持久性记忆，不会因为任务,阶段,步骤的结束而被清空
-        md格式纯文本，**里面只能用三级标题及以下！不允许出现一二级标题！**
+    persistent_memory (Dict[str,str]): 
+		永久追加的精简记忆，用于记录Agent的持久性记忆，不会因为任务,阶段,步骤的结束而被清空。
+		其中key为记录的时间戳，value为对应的文本内容。（md格式纯文本，**里面只能用三级标题及以下！不允许出现一二级标题！**）
     
     agent_step (AgentStep): AgentStep是一个对step_state的管理类，维护一个包含step_state的列表
     step_lock (List[str]):
@@ -443,7 +444,7 @@ agent_state 是 Agent的重要承载体，它包含了一个Agent的所有状态
 | llm_config        | Dict[str, Any] | 从配置文件中获取 LLM 配置                                    | 是        | 否         |
 | human_config      | Dict[str, Any] | 从配置文件中获取人类账号密码等配置                           | 否        | 是         |
 | working_memory    | Dict[str, Any] | Agent工作记忆 {<task_id>: {<stage_id>: [<step_id>,...],...},...} 记录Agent还未完成的属于自己的任务 | 是        | 是         |
-| persistent_memory | str            | 由Agent自主追加的永久记忆，不会因为任务、阶段、步骤的结束而被清空；<br />（md格式纯文本，里面只能用三级标题 ### 及以下！不允许出现一二级标题！） | 是        | 是         |
+| persistent_memory | Dict[str,str]  | 由Agent自主追加的永久记忆，不会因为任务、阶段、步骤的结束而被清空；<br />其中Key为时间戳 `%Y%m%dT%H%M%S`，<br />Value为md格式纯文本（里面只能用三级标题 ### 及以下！不允许出现一二级标题！） | 是        | 是         |
 | agent_step        | AgentStep实例  | AgentStep,用于管理Agent的执行步骤列表；<br />（一般情况下步骤中只包含当前任务当前阶段的步骤，在下一个阶段时，上一个阶段的step_state会被同步到stage_state中，不会在列表中留存） | 是        | 是         |
 | step_lock         | List[str]      | 一般用于及时通信中的步骤锁机制；<br />包含多个唯一等待ID的列表，只有列表中所有等待ID都回收后，才执行下一个step，否则会步骤锁会一直暂停执行下一个step | 是        | 否         |
 | tools             | List[str]      | Agent可用的技能                                              | 是        | 是         |
@@ -710,11 +711,11 @@ Planning需要有操作Agent中AgentStep的能力，AgentStep是Agent的执行�
 >    self.add_step(planned_step, step_id, agent_state)  # 将规划的步骤列表添加到AgentStep中
 >    ```
 >
-> 2. 解析persistent_memory并追加到Agent持续性记忆中
+> 2. 解析persistent_memory指令内容并应用到Agent持续性记忆中
 >
 >    ```python
->    new_persistent_memory = self.extract_persistent_memory(response)
->    agent_state["persistent_memory"] += "\n" + new_persistent_memory
+>    instructions = self.extract_persistent_memory(response)
+>    self.apply_persistent_memory(agent_state, instructions)
 >    ```
 
 
@@ -833,11 +834,11 @@ Reflection需要获取到过去执行步骤的信息，并且具备操作AgentSt
 >    self.add_step(reflection_step, step_id, agent_state)  # 将规划的步骤列表添加AgentStep中
 >    ```
 >
-> 2. 解析persistent_memory并追加到Agent持续性记忆中
+> 2. 解析persistent_memory指令内容并应用到Agent持续性记忆中
 >
 >    ```python
->    new_persistent_memory = self.extract_persistent_memory(response)
->    agent_state["persistent_memory"] += "\n" + new_persistent_memory
+>    instructions = self.extract_persistent_memory(response)
+>    self.apply_persistent_memory(agent_state, instructions)
 >    ```
 
 
@@ -976,12 +977,13 @@ Summary技能对stage信息的获取来源于第一个步骤Planning_step：
 >    }
 >    ```
 >
-> 2. 解析persistent_memory并追加到Agent持续性记忆中
+> 2. 解析persistent_memory指令内容并应用到Agent持续性记忆中
 >
 >    ```python
->    new_persistent_memory = self.extract_persistent_memory(response)
->    agent_state["persistent_memory"] += "\n" + new_persistent_memory
+>    instructions = self.extract_persistent_memory(response)
+>    self.apply_persistent_memory(agent_state, instructions)
 >    ```
+>
 
 
 
@@ -1117,12 +1119,13 @@ Instruction Generation会获取下一个工具step的信息，并具备更新下
 >    next_tool_step.update_instruction_content(tool_instruction)
 >    ```
 >
-> 2. 解析persistent_memory并追加到Agent持续性记忆中
+> 2. 解析persistent_memory指令内容并应用到Agent持续性记忆中
 >
 >    ```python
->    new_persistent_memory = self.extract_persistent_memory(response)
->    agent_state["persistent_memory"] += "\n" + new_persistent_memory
+>    instructions = self.extract_persistent_memory(response)
+>    self.apply_persistent_memory(agent_state, instructions)
 >    ```
+>
 
 
 
@@ -1225,11 +1228,11 @@ Instruction Generation会获取下一个工具step的信息，并具备更新下
 
 **交互行为：**
 
-> 1. 解析persistent_memory并追加到Agent持续性记忆中
+> 1. 解析persistent_memory指令内容并应用到Agent持续性记忆中
 >
 >    ```python
->    new_persistent_memory = self.extract_persistent_memory(response)
->    agent_state["persistent_memory"] += "\n" + new_persistent_memory
+>    instructions = self.extract_persistent_memory(response)
+>    self.apply_persistent_memory(agent_state, instructions)
 >    ```
 
 
@@ -1331,11 +1334,11 @@ Instruction Generation会获取下一个工具step的信息，并具备更新下
 
 **交互行为：**
 
-> 1. 解析persistent_memory并追加到Agent持续性记忆中
+> 1. 解析persistent_memory指令内容并应用到Agent持续性记忆中
 >
 >    ```python
->    new_persistent_memory = self.extract_persistent_memory(response)
->    agent_state["persistent_memory"] += "\n" + new_persistent_memory
+>    instructions = self.extract_persistent_memory(response)
+>    self.apply_persistent_memory(agent_state, instructions)
 >    ```
 
 
@@ -1531,11 +1534,11 @@ Send Message 首先需要构建发送对象列表。[<agent_id>, <agent_id>, ...
 >    return_waiting_id = self.extract_return_waiting_id(step_state.text_content)
 >    ```
 >
-> 2. 解析persistent_memory并追加到Agent持续性记忆中
+> 2. 解析persistent_memory指令内容并应用到Agent持续性记忆中
 >
 >    ```python
->    new_persistent_memory = self.extract_persistent_memory(response)
->    agent_state["persistent_memory"] += "\n" + new_persistent_memory
+>    instructions = self.extract_persistent_memory(response)
+>    self.apply_persistent_memory(agent_state, instructions)
 >    ```
 >
 > 3. 如果发送的消息需要等待回复，则触发Agent步骤锁：
@@ -1547,6 +1550,7 @@ Send Message 首先需要构建发送对象列表。[<agent_id>, <agent_id>, ...
 >    	waiting_id_list = [str(uuid.uuid4()) for _ in message["receiver"]]
 >    	agent_state["step_lock"].extend(waiting_id_list)
 >    ```
+>
 
 
 
@@ -1672,11 +1676,11 @@ Message内容可能包含md标题，为了防止与其他提示的md标题形成
 
 **交互行为：**
 
-> 1. 解析persistent_memory并追加到Agent持续性记忆中
+> 1. 解析persistent_memory指令内容并应用到Agent持续性记忆中
 >
 >    ```python
->    new_persistent_memory = self.extract_persistent_memory(response)
->    agent_state["persistent_memory"] += "\n" + new_persistent_memory
+>    instructions = self.extract_persistent_memory(response)
+>    self.apply_persistent_memory(agent_state, instructions)
 >    ```
 
 
@@ -1837,11 +1841,11 @@ Task Manager会参考自身历史步骤信息（前面步骤获取任务信息�
 >
 >    此时task_instruction中包含"agent_id","action"和其他具体操作指令涉及的字段。
 >
-> 2. 解析persistent_memory并追加到Agent持续性记忆中
+> 2. 解析persistent_memory指令内容并应用到Agent持续性记忆中
 >
 >    ```python
->    new_persistent_memory = self.extract_persistent_memory(response)
->    agent_state["persistent_memory"] += "\n" + new_persistent_memory
+>    instructions = self.extract_persistent_memory(response)
+>    self.apply_persistent_memory(agent_state, instructions)
 >    ```
 
 
@@ -1978,11 +1982,11 @@ Agent Manager会参考自身历史步骤信息（前面步骤获取相关Agent�
 >
 >    此时agent_instruction中包含"agent_id","action"和其他具体操作指令涉及的字段。
 >
-> 2. 解析persistent_memory并追加到Agent持续性记忆中
+> 2. 解析persistent_memory指令内容并应用到Agent持续性记忆中
 >
 >    ```python
->    new_persistent_memory = self.extract_persistent_memory(response)
->    agent_state["persistent_memory"] += "\n" + new_persistent_memory
+>    instructions = self.extract_persistent_memory(response)
+>    self.apply_persistent_memory(agent_state, instructions)
 >    ```
 
 
@@ -2068,8 +2072,7 @@ Ask Info向Agent提供了查看自身以外的信息的能力包括其他Agent�
 >
 >    10. 查看指定agent_id或多个agent_id的详细agent_state信息
 >           
->
->        11. 查看MAS中所有技能与工具
+>11. 查看MAS中所有技能与工具
 
 
 
@@ -2160,11 +2163,11 @@ SyncState接收到消息查询指令后立刻回复消息给Agent，Agent立即�
 >    >
 >    > 以向Agent追加process_message step的形式，返回查询结果。
 >
-> 2. 解析persistent_memory并追加到Agent持续性记忆中
+> 2. 解析persistent_memory指令内容并应用到Agent持续性记忆中
 >
 >    ```python
->    new_persistent_memory = self.extract_persistent_memory(response)
->    agent_state["persistent_memory"] += "\n" + new_persistent_memory
+>    instructions = self.extract_persistent_memory(response)
+>    self.apply_persistent_memory(agent_state, instructions)
 >    ```
 >
 > 3. 必定触发Agent步骤锁：
@@ -2341,11 +2344,11 @@ SyncState接收到消息查询指令后立刻回复消息给Agent，Agent立即�
 >    self.add_next_step(planned_step, step_id, agent_state)  # 将决策的步骤列表添加到AgentStep中，插队到下一个待执行步骤之前
 >    ```
 >
-> 2. 解析persistent_memory并追加到Agent持续性记忆中
+> 2. 解析persistent_memory指令内容并应用到Agent持续性记忆中
 >
 >    ```python
->    new_persistent_memory = self.extract_persistent_memory(response)
->    agent_state["persistent_memory"] += "\n" + new_persistent_memory
+>    instructions = self.extract_persistent_memory(response)
+>    self.apply_persistent_memory(agent_state, instructions)
 >    ```
 
 
@@ -2856,17 +2859,17 @@ md_output.append(f"## 你已有的持续性记忆内容：\n"
 
 ### 5.6 历史步骤执行结果
 
-获取当前Stage下所有历史的step的执行结果，作为提示词
+获取当前Stage下所有历史的step的执行结果（**会同时获取到已执行的，和未执行的step信息**），作为提示词
 
 ```python
-md_output.append(f"# 历史已执行步骤 history_step\n")
+md_output.append(f"# 历史步骤（包括已执行和待执行） history_step\n")
 history_steps = self.get_history_steps_prompt(step_id, agent_state)  # 不包含标题的md格式文本
 md_output.append(f"{history_steps}\n")
 ```
 
 **执行器基类函数名：**get_history_steps_prompt
 
-**作用：**获取当前stage_id下所有step信息，并将其结构化组装。
+**作用：**获取当前stage_id下所有step信息，并将其结构化组装。会区分已执行和待执行步骤
 
 通常本方法应用于reflection，summary技能中。读取step的信息一般都会以str呈现，使用json.dumps()来处理步骤中execute_result与instruction_content。
 
@@ -3026,6 +3029,35 @@ md_output.append(f"{history_tools_result}\n")
 
 
 > 注：这一段在代码中实现的可读性不高
+
+
+
+### 5.10 管理持续性记忆
+
+对于LLM输出的有关持续性记忆的指令，Executor实现了将其应用到`agent_state["presistent_memory"]`的方法
+
+**执行器基类函数名：**extract_persistent_memory
+
+**作用：**
+
+从文本中解析持续性记忆，将持续性记忆指令从<persistent_memory>List[Dict]</persistent_memory>形式的LLM文本输出，转换成List[Dict]的具体指令格式。
+
+
+
+**执行器基类函数名：**apply_persistent_memory
+
+**作用：**
+
+将解析出来的持续性记忆应用到Agent状态中
+
+支持指令：
+
+- {"add": "你要追加的内容"}   → 自动生成时间戳为 key
+- {"delete": "时间戳"}       → 删除对应 key 的内容
+
+
+
+
 
 
 
@@ -3433,6 +3465,38 @@ self.agent_state["conversation_pool"]["global_messages"].append(
 
 
 
+#### 7.4.1 人类操作端API
+
+于 `mas.utils.web.human_interface` 实现人类操作端发送消息的接口实现后端接口：
+
+```python
+POST /api/send_message
+```
+
+请求参数（JSON）：
+
+```json
+{
+    "human_agent_id": "人类操作员ID",  # 这个ID是uuid.uuid4()的agent_id,而不是监控器中带"HumanAgent_"前缀的ID
+    "task_id": "任务ID",
+    "receiver": ["接收者ID1", "接收者ID2", ...],
+    "content": "消息内容",
+    "stage_relative": "相关阶段ID", // 可选，默认为"no_relative"
+    "need_reply": true,  // 可选，默认为true
+    "waiting": true      // 可选，默认为false
+}
+```
+
+返回格式：
+
+```python
+{
+    "StateID_1": { "task_id": "...", "task_name": "...", ... }
+}
+```
+
+
+
 
 
 
@@ -3786,5 +3850,11 @@ if message["return_waiting_id"] is not None:
 
 
 
-### 9.2 休眠与唤醒
+### 9.2 休眠与唤醒（TODO）
+
+如何让Agent以低token开销进入待命状态
+
+
+
+### 9.3 Persistent Memory 持续性记忆
 
