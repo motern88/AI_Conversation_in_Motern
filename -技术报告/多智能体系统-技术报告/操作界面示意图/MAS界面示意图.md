@@ -1565,19 +1565,35 @@ Step Intention: <step_intention>
 
 <img src="./asset/完整信息弹窗_Agent_C4记忆.jpg" alt="完整信息弹窗_Agent_C4记忆" style="zoom:13%;" />
 
-图注：`Agent-C4`记忆一栏展示一个`D`。展示Agent自身记录的持续性记忆
+图注：`Agent-C4`记忆一栏元素`D`展示多个元素`E`。展示Agent自身记录的持续性记忆，其中每个元素`E`代表一条持续性记忆
 
 **呈现方式：**
 
-直接将`persistent_memory`字段内容在元素`D`中显示，存在换行符等，需要进行markdown编译
+直接将`persistent_memory`字段内容(字段)在元素`D`中显示，字典中每一条记忆用一个元素`E`表示，元素`E`的高度随着该条记忆的文本内容动态变化，用于完全展示该条记忆的文本内容。
+
+其中每个`E`元素内展示字符串如下：
 
 ```markdown
-<persistent_memory>
+<key> >
+<value>
+```
+
+示例
+
+```markdown
+20250613T103022 > 
+当前阶段目标：作为管理Agent的初始活动环境，需持续等待或主动向人类询问指令，根据指示创建新任务。关键操作：需先明确HumanAgent ID，再通过send_message建立通信。
 ```
 
 **数据来源：**
 
 直接调用Agent状态查询API获取agent详细信息
+
+`agent_stage["persistent_memory"]`持续性记忆格式为 `Dict[str,str]`  其中Key为时间戳，值为纯文本：
+
+```python
+{"20250613T103022":"当前我完成了...", "20250613T103523":"当前我正在..."}
+```
 
 **交互功能：**
 
