@@ -3589,7 +3589,7 @@ GET /api/states?type=step
 
 
 
-### 9.1 步骤锁（通信等待回复时）
+### 9.1 步骤锁-通信等待回复时
 
 由于我们MAS中Agent与其他组件或其他Agent的通信是通过 Send Message 和 Process Message 技能，以步骤 Step 的方式执行。
 
@@ -3783,4 +3783,8 @@ if message["return_waiting_id"] is not None:
 ```
 
 
+
+
+
+### 9.2 休眠与唤醒
 
