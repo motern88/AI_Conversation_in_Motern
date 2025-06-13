@@ -1557,7 +1557,7 @@ Step Intention: <step_intention>
 
 
 
-#### C4 记忆（TODO 持续性记忆格式修改了）
+#### C4 记忆
 
 选择`C4`记忆一栏时，元素`D`展示：
 
