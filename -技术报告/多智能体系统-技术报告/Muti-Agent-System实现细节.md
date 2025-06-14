@@ -3854,7 +3854,77 @@ if message["return_waiting_id"] is not None:
 
 如何让Agent以低token开销进入待命状态
 
+1.无Step执行的休眠，那么我们就要实现一个唤醒机制。这个唤醒机制是消息进来后precess_message/send_message能够追加reflection以重新启动吗（当前stage没有其他step时）？
+2.有Step的休眠，那么我们就要实现一个低token开销的待命step
+
+
+
 
 
 ### 9.3 Persistent Memory 持续性记忆
+
+因为我们MAS中Agent执行被拆分为了一个个Step，每个Step之间重新组提示词并不共享上下文。因此我们在 `agent_state` 实现了名为 `persistent_memory` 的字典用于存放跨Step甚至是跨任务的持续性记忆。
+
+该持续性记忆完全由Agent自主管理，Agent在每个Step中都会接收到关于如何管理持续性记忆的提示词，以及在每个技能调用时Agent都能够查看自己已有的持续性记忆。
+
+#### 9.3.1 持续性记忆的形式
+
+`agent_state["persistent_memory"] = {}` 持续性记忆初始化为一个字典。每个step执行中，Agent要添加的持续性记忆都会以 时间戳为Key、具体内容为Value 添加到字典中。
+
+例如：
+
+```python
+{
+	"20250613T103022":"当前我完成了...",
+    "20250613T103523":"当前我正在...",
+    "20250613T104023":"记录任务信息...",
+}
+```
+
+
+
+#### 9.3.2 持续性记忆的管理
+
+我们在 `mas.agent.base.base_prompt` 的YAML文件中记录了管理和使用持续性记忆的提示词 `persistent_memory_prompt` 。
+
+我们在 `mas.agent.base.executor_base.Executor` 类实现了用于从LLM返回结果中解析持续性记忆指令并应用指令的管理方法 `extract_persistent_memory` 和 `apply_persistent_memory` 。
+
+
+
+我们的允许Agent以以下方式管理其持续性记忆：
+
+- 追加永久持续性记忆
+
+  使用add指令和要添加的新记忆内容。通过在输出结果中添加以下格式的文本来追加永久持续性记忆：
+
+  ```python
+  <persistent_memory>
+  [{"add":"要追加的永久持续性记忆内容"}]
+  </persistent_memory>
+  ```
+
+- 删除已有的记忆内容：
+
+  通过使用delete指令和对应的时间戳，删除对应时间戳下的记忆内容。通过在输出结果中添加以下格式的文本来替换/修改已有的永久持续性记忆内容：
+
+  ```python
+  <persistent_memory>
+  [{"delete":"要删除的永久持续性记忆的时间戳"}]
+  </persistent_memory>
+  ```
+
+  
+
+示例：
+
+如果我想要替换20250613T103022时间戳下的记忆内容为"ABC网站网址是XXXX"我可以先删除再追加，输出以下内容：
+
+```python
+<persistent_memory>
+[
+    {"delete":"20250613T103022"},
+    {"add":"ABC网站网址是XXXX"}
+]
+</persistent_memory>
+```
 
