@@ -3982,6 +3982,6 @@ if message["return_waiting_id"] is not None:
 
   > 这个决策技能可能是reflection？然而reflection却又都是针对Stage完成情况反思的，reflection不直接适用于该情景的决策。要么修改reflection的能力，要么直接实现一个更自由地不考虑Stage目标的步骤规划/决策技能。
 
-一个综合以上两种的方式是，我们首先允许send_message走向两个分支：1）直接输出消息，2）获取更多信息。在获取更多信息中，实际插入追加（add_next_step）一个free_decision自由决策技能。
+一个综合以上两种的方式是，我们首先允许send_message走向两个分支：1）直接输出消息；2）获取更多信息。在获取更多信息中，实际插入追加（add_next_step）一个free_decision自由决策技能。
 
 其次我们实现这个free_decision技能，专门用于与阶段解耦的动态决策。该决策技能能够和planning/reflection/tool_decision一样去规划新的step。
