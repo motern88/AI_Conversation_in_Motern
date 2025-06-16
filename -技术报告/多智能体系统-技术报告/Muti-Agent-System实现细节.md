@@ -3873,7 +3873,7 @@ if message["return_waiting_id"] is not None:
 
 
 
-综上，对于任何情况下，我们不需要额外实现唤醒机制，仅需要保持MAS系统初始任务一直活跃，使得存在至少一位管理Agent一直活跃即可。
+综上，对于任何情况下，**我们不需要额外实现唤醒机制**，仅需要保持MAS系统初始任务一直活跃，使得存在至少一位管理Agent一直活跃即可。
 
 
 
@@ -3976,12 +3976,12 @@ if message["return_waiting_id"] is not None:
 
 此时应当在需要回复的时候通过一些其他方法去判断和获取额外信息，有几种可能的方式：
 
-- 将添加send_message改为长尾技能，使得send_message能够触发ask_info技能。将多步技能整合到send_message一步技能中，或者将send_message的输出结果变为可以在"获取更多信息"和”直接消息回复“之间决策。
+- 将添加send_message改为长尾技能，使得send_message能够触发ask_info等技能或工具获取信息。将多步技能整合到send_message一步技能中，或者将send_message的输出结果变为可以在"获取更多信息"和”直接消息回复“之间决策。
 
-  
-
-- 在Agent.receive_message需要回复的分支中不直接添加send_message技能，而是添加一个决策步骤，判断下一步是直接添加send_message步骤还是先添加ask_info再添加send_message步骤。
+- 在Agent.receive_message需要回复的分支中不直接添加send_message技能，而是添加一个决策步骤，判断下一步是直接添加send_message步骤还是先添加ask_info等获取信息再添加send_message步骤。
 
   > 这个决策技能可能是reflection？然而reflection却又都是针对Stage完成情况反思的，reflection不直接适用于该情景的决策。要么修改reflection的能力，要么直接实现一个更自由地不考虑Stage目标的步骤规划/决策技能。
 
-  
+一个综合以上两种的方式是，我们首先允许send_message走向两个分支：1）直接输出消息，2）获取更多信息。在获取更多信息中，实际插入追加（add_next_step）一个free_decision自由决策技能。
+
+其次我们实现这个free_decision技能，专门用于与阶段解耦的动态决策。该决策技能能够和planning/reflection/tool_decision一样去规划新的step。
