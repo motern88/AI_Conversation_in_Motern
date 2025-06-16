@@ -3850,14 +3850,38 @@ if message["return_waiting_id"] is not None:
 
 
 
-### 9.2 休眠与唤醒（TODO）
+### 9.2 休眠与唤醒
 
-如何让Agent以低token开销进入待命状态
+我们采用了无Step执行就进入休眠的机制，那么我们可能需要一个唤醒机制。
 
-1.无Step执行的休眠，那么我们就要实现一个唤醒机制。这个唤醒机制是消息进来后precess_message/send_message能够追加reflection以重新启动吗（当前stage没有其他step时）？
-2.有Step的休眠，那么我们就要实现一个低token开销的待命step
+这个唤醒机制可能是消息进来后Agent的`receive_message`方法能够追加`reflection`技能以重新启动（当前Stage无其它`reflection`技能时）？
+
+**对于执行Agent而言**：
+
+执行Agent只有一种可能当前Stage无任何Step，那就是当前Stage被完成的情况，因此也不会存在需要唤醒机制。如果需要执行Agent去开始任何新的Stage或Task，都由管理Agent使用管理技能去控制和决策。
+
+不存在向执行Agent以消息的形式去让执行Agent自己唤醒去赋予自己任务的情况。
+如果是执行Agent接收到询问信息的消息，即便处于休眠状态下也不影响Agent回复。
+
+因此对于执行Agent而言，额外的唤醒机制是不必要的。
+
+**对于管理Agent而言**：
+
+当管理Agent休眠，但是下辖的执行Agent仍在工作时。由于下属执行Agent工作完成时会以消息形式通知管理Agent，管理Agent能够通过Stage结束流程进行任务管理。
+
+当管理Agent休眠，同时下属执行Agent也已经完成相关工作。此时管理Agent并不拥有任何活跃中的Task。则管理Agent失去了活动空间，没法被自然唤醒。但是我们可以通过指定系统初始Task永不结束，永远保持有一个活跃Stage来使得管理Agent能够进行任务管理。
 
 
+
+综上，对于任何情况下，我们不需要额外实现唤醒机制，仅需要保持MAS系统初始任务一直活跃，使得存在至少一位管理Agent一直活跃即可。
+
+
+
+> **无Step休眠**
+>
+> 在本MAS中，Agent的休眠机制是自然而然地无需特地实现的。具体来说，我们Agent的活动方式完全依赖于Step：如果没有Step，Agent将不会进行任何活动；如果有待执行Step，Agent不需要任何额外控制就会自动执行剩余Step。
+>
+> 因此，我们Agent没有任何待执行Step时（当`AgentStep.todo_list`为空时），会自然进入“无Step休眠”，期间零LLM token开销。
 
 
 
@@ -3928,3 +3952,36 @@ if message["return_waiting_id"] is not None:
 </persistent_memory>
 ```
 
+
+
+### 9.4 消息干预执行（TODO）
+
+这里将讨论人类操作端发送消息干预Agent执行的情况
+
+
+
+
+
+## 10. 其他问题
+
+首先我们不应该将接收消息的两种情况（接收消息之后更好地去执行与接收消息之后更好地回复）混为一谈，前者属于**消息干预执行**，后者属于本次要讨论的问题——更好地消息回复：
+
+当Agent接收到一条询问消息，Agent会添加一个send_message用于回复该消息。
+
+然而当Agent在send_message中不知道正确回复答案时，却没有任何能力能够先去获取答案再进行send_message回复。因为接收到需要回复的消息后，在Agent.receive_message分支中没有能够增加信息获取step的能力，send_message步骤也没有能够进行信息获取的能力。
+
+> send_message主动添加的时候一般都会规划好预先获取的信息去发送消息。而send_message被动添加的时候，没法去获取暂时不知道的情况，只能立即通过send_message回复。
+
+
+
+此时应当在需要回复的时候通过一些其他方法去判断和获取额外信息，有几种可能的方式：
+
+- 将添加send_message改为长尾技能，使得send_message能够触发ask_info技能。将多步技能整合到send_message一步技能中，或者将send_message的输出结果变为可以在"获取更多信息"和”直接消息回复“之间决策。
+
+  
+
+- 在Agent.receive_message需要回复的分支中不直接添加send_message技能，而是添加一个决策步骤，判断下一步是直接添加send_message步骤还是先添加ask_info再添加send_message步骤。
+
+  > 这个决策技能可能是reflection？然而reflection却又都是针对Stage完成情况反思的，reflection不直接适用于该情景的决策。要么修改reflection的能力，要么直接实现一个更自由地不考虑Stage目标的步骤规划/决策技能。
+
+  
