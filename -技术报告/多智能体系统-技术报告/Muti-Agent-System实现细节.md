@@ -1396,23 +1396,53 @@ Instruction Generation会获取下一个工具step的信息，并具备更新下
 
 **说明：**
 
-Send Message会获取当前stage所有step执行情况的历史信息，使用LLM依据当前send_message_step意图进行汇总后，向指定Agent发送消息。
+Send Message首先会判断当前Agent已有的信息是否满足发送消息的条件，即要发送的正确消息内容，当前Agent是否已知。
+- 如果存在未获取的信息，不能支撑当前Agent发送消息内容，则会进入"获取更多信息分支"。
+- 如果当前Agent已有的信息满足发送消息的条件，则会进入"直接消息发送分支"。
 
-Send Message 首先需要构建发送对象列表。[<agent_id>, <agent_id>, ...]
-其次需要确定发送的内容，通过 Send Message 技能的提示+LLM调用返回结果的解析可以得到。
-需要根据发送的实际内容，LLM需要返回的信息:
 
-```python
-<send_message>
-{
-    "receiver": ["<agent_id>", "<agent_id>", ...],
-    "message": "<message_content>",  # 消息文本
-    "stage_relative": "<stage_id或no_relative>",  # 表示是否与任务阶段相关，是则填对应阶段Stage ID，否则为no_relative的字符串
-    "need_reply": <bool>,  # 需要回复则为True，否则为False
-    "waiting": <bool>,  # 等待回复则为True，否则为False
-}
-</send_message>
-```
+
+> **获取更多信息分支：**
+>
+> 当前Send Message执行时，Agent已有的信息不满足发送消息的条件（由LLM自行判断），进入获取更多信息分支。
+> 该分支的主要目的是将Send Message变为一个长尾技能，通过插入追加一个Decision Step来获取更多信息。
+> LLM会根据当前Agent已有的信息，判断需要获取哪些更多信息，返回:
+>
+> ```python
+> <get_more_info>
+> {
+>     "step_intention": "获取系统中XXX文档的XXX内容",  # 获取信息的意图说明
+>     "text_content": "我需要获取系统中关于XXX文档的XXX内容，需要精确到具体的XXX信息，以便我可以完成后续的消息发送。",  # 获取信息的详细描述
+> }
+> </get_more_info>
+> ```
+>
+> 我们会根据LLM返回的内容，追插入一个对应属性的Decision Step
+> 和与当前Send Message属性相同Send Message Step到当前Agent的步骤列表中。
+> (于`construct_decision_step_and_send_message_step`方法中构造)
+
+
+
+> **直接消息发送分支：**
+>
+> Send Message会获取当前stage所有step执行情况的历史信息，使用LLM依据当前send_message_step意图进行汇总后，向指定Agent发送消息。
+>
+> Send Message 首先需要构建发送对象列表。[<agent_id>, <agent_id>, ...]
+> 其次需要确定发送的内容，通过 Send Message 技能的提示+LLM调用返回结果的解析可以得到。
+> 需要根据发送的实际内容，LLM需要返回的信息:
+>
+> ```python
+> <send_message>
+> {
+>     "receiver": ["<agent_id>", "<agent_id>", ...],
+>     "message": "<message_content>",  # 消息文本
+>     "stage_relative": "<stage_id或no_relative>",  # 表示是否与任务阶段相关，是则填对应阶段Stage ID，否则为no_relative的字符串
+>     "need_reply": <bool>,  # 需要回复则为True，否则为False
+>     "waiting": <bool>,  # 等待回复则为True，否则为False
+> }
+> </send_message>
+> ```
+>
 
 
 
@@ -1470,8 +1500,19 @@ Send Message 首先需要构建发送对象列表。[<agent_id>, <agent_id>, ...
 > 1. 组装提示词
 > 2. llm调用
 > 3. 解析llm返回的消息内容
+>
+> 如果进入 直接消息发送 分支：
+>
 > 4. 解析llm返回的持续性记忆信息，追加到Agent的持续性记忆中
+>
 > 5. 如果发送消息需要等待回复，则触发步骤锁机制
+>
+> 6. 返回用于指导状态同步的execute_output
+>
+> 如果进入 获取更多信息 分支：
+>
+> 4. 解析persistent_memory并追加到Agent持续性记忆中
+> 5. 构造插入的Decision Step与Send Message Step，插入到Agent的步骤列表中
 > 6. 返回用于指导状态同步的execute_output
 
 
@@ -1506,7 +1547,7 @@ Send Message 首先需要构建发送对象列表。[<agent_id>, <agent_id>, ...
 
 **交互行为：**
 
-> 1. 将LLM初步消息体转换为MAS通用消息体，并添加待处理消息到task_state.communication_queue：
+> 1. **直接消息发送分支：**将LLM初步消息体转换为MAS通用消息体，并添加待处理消息到task_state.communication_queue：
 >
 >    通过`send_message`字段指导sync_state更新，
 >
@@ -1541,7 +1582,7 @@ Send Message 首先需要构建发送对象列表。[<agent_id>, <agent_id>, ...
 >    self.apply_persistent_memory(agent_state, instructions)
 >    ```
 >
-> 3. 如果发送的消息需要等待回复，则触发Agent步骤锁：
+> 3. **直接消息发送分支：**如果发送的消息需要等待回复，则触发Agent步骤锁：
 >
 >    为消息中的每个receiver生成唯一等待标识ID，并将其全部添加到步骤锁中。在Agent回收全部标识ID（收到包含标识ID的信息）前，步骤锁一直生效，暂停后续step的执行。
 >
@@ -1549,6 +1590,37 @@ Send Message 首先需要构建发送对象列表。[<agent_id>, <agent_id>, ...
 >    if message["waiting"]:
 >    	waiting_id_list = [str(uuid.uuid4()) for _ in message["receiver"]]
 >    	agent_state["step_lock"].extend(waiting_id_list)
+>    ```
+>
+> 4. **获取更多信息分支：**构造插入的Decision Step与Send Message Step，插入到Agent的步骤列表中：
+>
+>    通过`construct_decision_step_and_send_message_step`将LLM输出指令构造成步骤添加指令，构造相应意图与说明的Decision Step和一个与当前Send Message一致的Send Message Step。
+>
+>    `construct_decision_step_and_send_message_step()`：
+>
+>    ```python
+>    # 获取当前步骤的状态
+>    current_step = agent_state["agent_step"].get_step(step_id)[0]
+>    # 构造Decision Step与Send Message Step
+>    decision_step = {
+>        "step_intention": instruction["step_intention"],
+>        "type": "skill",
+>        "executor": "decision",
+>        "text_content": instruction["text_content"]
+>    }
+>    send_message_step = {
+>        "step_intention": current_step.step_intention,
+>        "type": "skill",
+>        "executor": "send_message",
+>        "text_content": current_step.text_content
+>    }
+>    return [decision_step, send_message_step]
+>    ```
+>
+>    将构造的decision和send_message插入到Agent的步骤列表中：
+>
+>    ```python
+>    self.add_next_step(step_list, step_id, agent_state)
 >    ```
 >
 
@@ -1561,8 +1633,17 @@ Send Message 首先需要构建发送对象列表。[<agent_id>, <agent_id>, ...
 >
 > 2. 在当前step.execute_result中记录技能解析结果：
 >
+>    **直接消息发送分支：**
+>
 >    ```python
 >    execute_result = {"send_message": send_message}
+>    step.update_execute_result(execute_result)
+>    ```
+>
+>    **获取更多信息分支：**
+>
+>    ```python
+>    execute_result = {"get_more_info": instruction}
 >    step.update_execute_result(execute_result)
 >    ```
 >
@@ -2398,9 +2479,43 @@ SyncState接收到消息查询指令后立刻回复消息给Agent，Agent立即�
 
 
 
+### 3.13 Decision
+
+**期望作用：**
 
 
-### 3.13 （TODO）
+
+**说明：**
+
+
+
+**提示词顺序：**
+
+系统 → 角色 → (目标 → 规则) → 记忆
+
+
+
+**具体实现：**
+
+
+
+**提示词：**
+
+
+
+**交互行为：**
+
+
+
+**其他状态同步：**
+
+
+
+
+
+
+
+### 3.14 （TODO）
 
 **期望作用：**
 
@@ -3982,6 +4097,6 @@ if message["return_waiting_id"] is not None:
 
   > 这个决策技能可能是reflection？然而reflection却又都是针对Stage完成情况反思的，reflection不直接适用于该情景的决策。要么修改reflection的能力，要么直接实现一个更自由地不考虑Stage目标的步骤规划/决策技能。
 
-一个综合以上两种的方式是，我们首先允许send_message走向两个分支：1）直接输出消息；2）获取更多信息。在获取更多信息中，实际插入追加（add_next_step）一个free_decision自由决策技能。
+一个综合以上两种的方式是，我们首先允许send_message走向两个分支：1）直接输出消息；2）获取更多信息。在获取更多信息中，实际插入追加（add_next_step）一个decision自由决策技能。
 
-其次我们实现这个free_decision技能，专门用于与阶段解耦的动态决策。该决策技能能够和planning/reflection/tool_decision一样去规划新的step。
+其次我们实现这个decision技能，专门用于与阶段解耦的动态决策。该决策技能能够和planning/reflection/tool_decision一样去规划新的step。
