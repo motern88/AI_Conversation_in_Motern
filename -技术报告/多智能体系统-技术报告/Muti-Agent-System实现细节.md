@@ -2481,11 +2481,13 @@ SyncState接收到消息查询指令后立刻回复消息给Agent，Agent立即�
 
 ### 3.13 Decision
 
-**期望作用：**
-
-
+**期望作用：**一种更自由的即时的决策技能。该技能与Stage解耦，不再依赖Stage的状态来进行决策，同时Decision规划的步骤均以插入形式添加而非在末尾追加。
 
 **说明：**
+
+与其他决策技能的区别:
+- Decision技能不依赖Stage的状态来进行决策。Decision决策自由度更高，能够更自由的应对非任务相关的决策，例如突发的消息回复
+- Decision技能的规划步骤以插入形式添加，而非在末尾追加。Decision决策的步骤优先级更高
 
 
 
@@ -2497,21 +2499,90 @@ SyncState接收到消息查询指令后立刻回复消息给Agent，Agent立即�
 
 **具体实现：**
 
+> 1. 组装提示词:
+>
+> 2. llm调用
+> 3. 解析llm返回的步骤信息，更新AgentStep中的步骤列表
+> 4. 解析llm返回的持续性记忆信息，插入到Agent的持续性记忆中
+> 5. 返回用于指导状态同步的execute_output
+
 
 
 **提示词：**
+
+> 1 MAS系统提示词（# 一级标题）
+> 2 Agent角色:（# 一级标题）
+> 	2.1 Agent角色背景提示词（## 二级标题）
+> 	2.2 Agent可使用的工具与技能权限提示词（## 二级标题）
+> 3 decision step:（# 一级标题）
+> 	3.1 step.step_intention 当前步骤的简要意图
+> 	3.2 step.text_content 具体目标
+> 	3.3 技能规则提示(decision_config["use_prompt"])
+> 4 持续性记忆:（# 一级标题）
+> 	4.1 Agent持续性记忆说明提示词（## 二级标题）
+> 	4.2 Agent持续性记忆内容提示词（## 二级标题）
 
 
 
 **交互行为：**
 
+> 1. 更新AgentStep中的步骤列表，以插入到下一个step之前的形式
+>
+>    ```python
+>    self.add_next_step(decision_step, step_id, agent_state)  # 将规划的步骤列表添加AgentStep中
+>    ```
+>
+> 2. 解析persistent_memory指令内容并应用到Agent持续性记忆中
+>
+>    ```python
+>    instructions = self.extract_persistent_memory(response)
+>    self.apply_persistent_memory(agent_state, instructions)
+>    ```
+
 
 
 **其他状态同步：**
 
-
-
-
+> 1. 更新agent_step中当前step状态：
+>    execute开始执行时更新状态为 “running”，完成时更新为 “finished”，失败时更新为 “failed”
+>
+> 2. 在当前step.execute_result中记录技能解析结果：
+>
+>    ```python
+>    execute_result = {"decision_step": decision_step}
+>    step.update_execute_result(execute_result)
+>    ```
+>
+> 3. 更新stage_state.every_agent_state中自己的状态：
+>
+>    通过`update_stage_agent_state`字段指导sync_state更新，
+>
+>    Decision顺利完成时`update_agent_situation`更新为 ”working“，失败时更新为 “failed”
+>
+>    ```python
+>    execute_output["update_stage_agent_state"] = {
+>        "task_id": task_id,
+>        "stage_id": stage_id,
+>        "agent_id": agent_state["agent_id"],
+>        "state": update_agent_situation,
+>    }
+>    ```
+>
+> 4. 添加步骤完成情况到task_state的共享消息池：
+>
+>    通过`send_shared_message`字段指导sync_state更新，
+>
+>    Decision顺利完成时`shared_step_situation`更新为 ”finished“，失败时更新为 “failed”
+>
+>    ```python
+>    execute_output["send_shared_message"] = {
+>        "task_id": task_id,
+>        "stage_id": stage_id,
+>        "agent_id": agent_state["agent_id"],
+>        "role": agent_state["role"],
+>        "content": f"执行Decision步骤:{shared_step_situation}，"
+>    }
+>    ```
 
 
 
