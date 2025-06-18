@@ -4040,34 +4040,36 @@ if message["return_waiting_id"] is not None:
 
 我们采用了无Step执行就进入休眠的机制，那么我们可能需要一个唤醒机制。
 
-这个唤醒机制可能是消息进来后Agent的`receive_message`方法能够追加`reflection`技能以重新启动（当前Stage无其它`reflection`技能时）？
-
-**对于执行Agent而言**：
-
-执行Agent只有一种可能当前Stage无任何Step，那就是当前Stage被完成的情况，因此也不会存在需要唤醒机制。如果需要执行Agent去开始任何新的Stage或Task，都由管理Agent使用管理技能去控制和决策。
-
-不存在向执行Agent以消息的形式去让执行Agent自己唤醒去赋予自己任务的情况。
-如果是执行Agent接收到询问信息的消息，即便处于休眠状态下也不影响Agent回复。
-
-因此对于执行Agent而言，额外的唤醒机制是不必要的。
-
-**对于管理Agent而言**：
-
-当管理Agent休眠，但是下辖的执行Agent仍在工作时。由于下属执行Agent工作完成时会以消息形式通知管理Agent，管理Agent能够通过Stage结束流程进行任务管理。
-
-当管理Agent休眠，同时下属执行Agent也已经完成相关工作。此时管理Agent并不拥有任何活跃中的Task。则管理Agent失去了活动空间，没法被自然唤醒。但是我们可以通过指定系统初始Task永不结束，永远保持有一个活跃Stage来使得管理Agent能够进行任务管理。
-
-
-
-综上，对于任何情况下，**我们不需要额外实现唤醒机制**，仅需要保持MAS系统初始任务一直活跃，使得存在至少一位管理Agent一直活跃即可。
-
-
-
 > **无Step休眠**
 >
 > 在本MAS中，Agent的休眠机制是自然而然地无需特地实现的。具体来说，我们Agent的活动方式完全依赖于Step：如果没有Step，Agent将不会进行任何活动；如果有待执行Step，Agent不需要任何额外控制就会自动执行剩余Step。
 >
-> 因此，我们Agent没有任何待执行Step时（当`AgentStep.todo_list`为空时），会自然进入“无Step休眠”，期间零LLM token开销。
+> 因此，我们Agent没有任何待执行Step时（当`AgentStep.todo_list`为空时），会自然进入“无Step休眠”，期间 LLM 零 token 开销。
+
+
+
+这个唤醒机制可能是消息进来后Agent的`receive_message`方法能够追加`reflection`技能以重新启动（当前Stage无其它`reflection`技能时）？
+
+- 对于执行Agent而言：
+
+  执行Agent只有一种可能当前Stage无任何Step，那就是当前Stage被完成的情况，因此也不会存在需要唤醒机制。如果需要执行Agent去开始任何新的Stage或Task，都由管理Agent使用管理技能去控制和决策。
+
+  不存在向执行Agent以消息的形式去让执行Agent自己唤醒去赋予自己任务的情况。
+  如果是执行Agent接收到询问信息的消息，即便处于休眠状态下也不影响Agent回复。
+
+  因此对于执行Agent而言，额外的唤醒机制是不必要的。
+
+
+
+- 对于管理Agent而言：
+
+  当管理Agent休眠，但是下辖的执行Agent仍在工作时。由于下属执行Agent工作完成时会以消息形式通知管理Agent，管理Agent能够通过Stage结束流程进行任务管理。
+
+  当管理Agent休眠，同时下属执行Agent也已经完成相关工作。此时管理Agent并不拥有任何活跃中的Task。则管理Agent失去了活动空间，没法被自然唤醒。但是我们可以通过指定系统初始Task永不结束，永远保持有一个活跃Stage来使得管理Agent能够进行任务管理。
+
+
+
+综上，对于任何情况下，**我们不需要额外实现唤醒机制**，仅需要保持MAS系统初始任务一直活跃，使得存在至少一位管理Agent一直活跃即可。
 
 
 
@@ -4148,7 +4150,13 @@ if message["return_waiting_id"] is not None:
 
 
 
-## 10. 其他问题
+## 10. 讨论
+
+
+
+### 10.1 更好的消息回复
+
+> Date：2025/6/16
 
 首先我们不应该将接收消息的两种情况（接收消息之后更好地去执行与接收消息之后更好地回复）混为一谈，前者属于**消息干预执行**，后者属于本次要讨论的问题——更好地消息回复：
 
