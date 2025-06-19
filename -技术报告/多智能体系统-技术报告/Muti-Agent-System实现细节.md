@@ -418,7 +418,72 @@ Agent被分配执行或协作执行一个任务时，任务会由管理Agent拆�
 
 
 
-#### 2.2.1 Stage的完成判定
+- on_stage_complete (Optional[Callable]): 
+
+  阶段完成时的回调函数，用于向task_state提交阶段完成情况
+
+  在task_state中添加stage_state时会自动绑定该回调函数，不需要手动传入。
+
+
+
+
+#### 2.2.1 Stage的完成判定 
+
+**Agent**
+
+当执行Agent完成自己被分配的一个Stage内的目标后，会以一个Summary Step结尾。在Summary Step中，该Agent会总结自己Stage的完成情况，通过SyncState.sync_state的 `update_stage_agent_completion` 字段提交到StageState.completion_summary中。
+
+当Stage中所有Agent都提交了完成总结时触发Stage完成判定
+
+**StageState**
+
+当Stage中所有Agent都提交了完成总结时，会使用回调函数 `on_stage_complete` 通知上一级状态task_state
+
+**TaskState**
+
+TaskState中添加的每个StateState都会自动为其 `on_stage_complete` 回调函数绑定具体方法 `self._handle_stage_completion` 
+
+当Stage触发使用该回调函数时，执行`TaskState._handle_stage_completion`方法：
+
+- 构造向任务管理Agent的阶段完成通知消息
+
+  ```python
+  message: Message = {
+      "task_id": self.task_id,
+      "sender_id": "[TaskState系统通知]",
+      "receiver": self.task_manager,
+      "message": f"[TaskState] 已侦测到阶段 {stage_id} 下所有Agent均已提交完成总结。\n"
+                 f"**阶段中各个Agent被分配阶段目标**: {agent_allocation} \n"
+                 f"**阶段中各个Agent提交的完成总结**: {completion_data} \n"
+                 f"**现在你作为管理Agent需要对该阶段完成情况进行判断**:\n"
+                 f"- 如果阶段完成情况满足预期，则使用task_manager技能结束该任务阶段\n"
+                 f"- 如果阶段完成情况不满足预期，则使用task_manager和agent_manager技能指导Agent进行相应的调整\n",
+      "stage_relative": stage_id,
+      "need_reply": False,
+      "waiting": None,
+      "return_waiting_id": None
+  }
+  ```
+
+- 将构造好的消息放入任务的通信队列中
+
+  ```python
+  self.communication_queue.put(message)
+  ```
+
+  
+
+
+
+> 后续该消息会经由Message Dispatcher消息分发器分发给该管理Agent。
+>
+> 阶段完成判定通知的消息会进入该Agent的`receive_message`方法分支中，最终由Agent的process_message技能处理。
+
+
+
+#### 2.2.2 判定完成失败时的修正（TODO）
+
+
 
 
 
@@ -4154,12 +4219,6 @@ if message["return_waiting_id"] is not None:
 
 
 
-### 9.4 消息干预执行（TODO）
-
-这里将讨论人类操作端发送消息干预Agent执行的情况
-
-
-
 
 
 ## 10. 讨论
@@ -4191,3 +4250,11 @@ if message["return_waiting_id"] is not None:
 一个综合以上两种的方式是，我们首先允许send_message走向两个分支：1）直接输出消息；2）获取更多信息。在获取更多信息中，实际插入追加（add_next_step）一个decision自由决策技能。
 
 其次我们实现这个decision技能，专门用于与阶段解耦的动态决策。该决策技能能够和planning/reflection/tool_decision一样去规划新的step。
+
+
+
+### 10.2 更好的消息干预执行
+
+> Date：2025/6/--
+
+这里将讨论人类操作端发送消息干预Agent执行的情况
