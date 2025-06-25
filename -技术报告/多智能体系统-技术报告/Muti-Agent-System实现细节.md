@@ -371,6 +371,10 @@ MAS系统接收到一个具体任务时，会实例化一个TaskState对象用�
 
 
 
+注：Task完成后，我们不会设计要求Agent主动向人类操作员进行通知。
+
+
+
 #### 2.1.2 判定Task完成失败时的修正
 
 管理Agent会使用task_manager技能尝试为Task添加新的Stage来弥补不满足的条件
