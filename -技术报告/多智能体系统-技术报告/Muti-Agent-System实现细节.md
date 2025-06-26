@@ -4326,3 +4326,36 @@ if message["return_waiting_id"] is not None:
 
 为此我们为Agent.receive_message接收消息的分支的两个末端：`send_message`和`process_message`技能都引入了一个新的决策分支，允许这两个技能在必要时刻通过插入追加Decision Step来实现与环境交互的能力，而非单纯的回复消息和理解消息。
 
+
+
+### 10.3 Agent同时处理多个不同Stage的任务
+
+> Date：2025/6/26
+
+MAS并不限制Agent同时接受多个Stage的任务。由于Agent执行Step是单线程操作，Agent在同时进行多个Stage时是多个Stage各自的Step交替执行的。
+
+我们需要考虑的就是避免来自不同Stage的Step交替执行时不会引发额外异常。
+
+**Stage混淆：**
+
+我们在Executor中的几个技能常用的基础方法：
+
+> `get_history_steps_prompt` 组装历史步骤（已执行和待执行的step）信息提示词`get_tool_history_prompt` 组装指定长尾工具的历史调用信息
+> `get_tool_instruction_generation_step_prompt` 组装为工具指令生成时的提示词
+
+方法中查找和调用时均已区分不同Stage，因此不会产生Stage之间的混淆。
+
+**性能影响：**
+
+多Stage交替执行会影响性能，例如现在有两个不同的Stage分别为A和B，那么来自这些Stage的步骤如下：
+
+```
+A B A A B B B B B B B B B A
+```
+
+如果想结束A Stage那么就得等B Stage下的所有步骤均执行完毕。因此很大程度上，Agent同时处理N个不同Stage则会导致平均每个Stage以N倍的时间结束。
+
+（这是很符合人类工作模式的，请让Agent尽量保持专注在一个任务阶段上。）
+
+我们应当注意**避免Agent同时接受过多Stage**，我们可以通过实例化多个相似功能的Agent来替代。
+
