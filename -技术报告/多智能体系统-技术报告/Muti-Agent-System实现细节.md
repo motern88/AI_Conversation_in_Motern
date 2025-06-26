@@ -705,6 +705,13 @@ Agent的执行步骤管理类，用于管理Agent的执行步骤列表。包括�
 
 
 
+#### 2.4.1 Step的清除机制
+
+与Stage相关的Step会在Agent接收到该Stage的“finish_stage”指令后清除，
+与Stage无关的Step会在Agent接收到该Task的“finish_task”指令后清除。
+
+
+
 ### 2.5 Sync State
 
 **类名：**SyncState
@@ -4358,4 +4365,10 @@ A B A A B B B B B B B B B A
 （这是很符合人类工作模式的，请让Agent尽量保持专注在一个任务阶段上。）
 
 我们应当注意**避免Agent同时接受过多Stage**，我们可以通过实例化多个相似功能的Agent来替代。
+
+
+
+### 10.4 如何接入MCP服务
+
+为了兼容标准，我们希望我们也能享受到MCP服务的便利，我们需要将MCP服务的一部分与我们的MAS融合，以实现在MAS已有工作逻辑中支持调用任意MCP服务。
 
