@@ -2809,9 +2809,47 @@ SyncState接收到消息查询指令后立刻回复消息给Agent，Agent立即�
 
   
 
+### 4.1 MCP Server （TODO）
 
 
-### 4.1 Browser Use （TODO）
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+### 4.2 Browser Use （TODO）
 
 **期望作用：**
 
