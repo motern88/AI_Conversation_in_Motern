@@ -2775,6 +2775,17 @@ SyncState接收到消息查询指令后立刻回复消息给Agent，Agent立即�
 
 ## 4. Tool 工具
 
+我们所有的工具均以MCP（model context protocol）模型上下文协议的标准实现。为此我们的工具实现包含：
+
+- MCP Client ：实现基础的MCP客户端功能
+- MCP Tool Executor ： 负责在MAS系统中调用具体MCP Server的能力的执行器
+
+在此基础上，我们通过在MCP Client中加载各种第三方MCP Server，实现任意工具的高效拓展。
+
+
+
+**在MAS系统中调用工具说明**
+
 所有的工具 `tool` 一般都不包含LLM调用，工具的指令生成由专门的技能 `InstructionGeneration` 技能完成。因此一个基本的工具执行包含两个Step：
 
 ```python
@@ -2809,7 +2820,7 @@ SyncState接收到消息查询指令后立刻回复消息给Agent，Agent立即�
 
   
 
-### 4.1 MCP Server （TODO）
+### 4.1 MCP Client
 
 
 
@@ -2823,6 +2834,7 @@ SyncState接收到消息查询指令后立刻回复消息给Agent，Agent立即�
 
 
 
+### 4.2 MCP Tool Executor
 
 
 
@@ -2836,6 +2848,7 @@ SyncState接收到消息查询指令后立刻回复消息给Agent，Agent立即�
 
 
 
+### 4.3 MCP 基础提示词
 
 
 
@@ -2848,225 +2861,6 @@ SyncState接收到消息查询指令后立刻回复消息给Agent，Agent立即�
 
 
 
-
-### 4.2 Browser Use （TODO）
-
-**期望作用：**
-
-Agent通过browser_use工具能够执行自动化的网络浏览任务，包括访问网站、提取网页内容、填写表单、点击按钮等复杂的网页交互操作。
-
-**说明：**
-
-Browser Use工具允许MAS系统直接与网络世界进行交互，扩展其信息获取和任务执行能力。工具使用底层的browser-use库，该库通过Playwright提供浏览器自动化能力，结合LLM的理解能力实现复杂网页任务的自动化完成。
-
-
-
-**具体实现：**
-
-从步骤状态获取指令:
-
-> 1.1 从step_state.instruction_content获取由instruction_generation技能生成的浏览器操作指令
->
-> 1.2 尝试提取指令生成中提取到的任务描述
-
-执行浏览器操作任务:
-
-> 2.1 根据LLM配置初始化兼容的LLM (OpenAI或Ollama)
->
-> 2.2 设置浏览器环境配置(Browser、Controller)
->
-> 2.3 创建并运行browser-use 第三方Agent执行任务，限制最大步骤数为100
->
-> 2.4 确保资源正确关闭(浏览器、playwright实例)
-
-处理执行结果:
-
-> 3.1 提取任务执行的最终结果(final_result)
->
-> 3.2 记录访问的URL列表(urls_visited)和提取的内容数量(content_count)
->
-> 3.3 构建结果摘要用于状态更新
-
-更新步骤状态:
-
-> 4.1 成功执行时将步骤状态更新为finished
->
-> 4.2 失败时将步骤状态更新为failed并记录错误信息
-
-返回用于指导状态同步的execute_output:
-
-> 5.1 通过update_stage_agent_state指导更新agent状态为working
->
-> 5.2 通过send_shared_message添加步骤执行结果到task共享消息池
-
-
-
-错误处理:
-
-> 指令完全为空: 更新步骤状态为failed并返回错误信息
->
-> 浏览器操作失败：捕获并记录详细的异常信息，更新步骤状态为failed
->
-> LLM配置缺失：检查是否有可用的LLM配置，不存在则报错并更新状态
-
-浏览器任务结果包含:
-
-> final_result: 任务执行的最终结果文本
->
-> urls_visited: 访问过的网页URL列表
->
-> extracted_content: 从网页中提取的内容列表
->
-> content_count: 提取内容的数量统计
-
-适用场景:
-
-> 网络信息采集：从多个网站收集特定信息
->
-> 自动化表单填写：完成注册、申请等需要填写表单的任务
->
-> 市场调研：收集产品信息、价格比较等
->
-> 自动化测试：验证网站功能和内容的有效性
->
-> 预约和订购: 自动化完成在线预约和订购流程
-
-注意事项:
-
-- 必须由instruction_generation技能先生成明确的浏览器操作指令
-- 指令应详细描述所需的浏览任务，包括目标网站、操作步骤和期望结果
-- 默认以非无头模式运行浏览器(headless=False)，便于观察和调试
-- 操作过程中的截图会保存到screenshots目录
-
-
-
-**交互行为：**
-
-> 1. 从指令中提取浏览器任务描述：
->
-> ```python
-> task_description  = step_state.instruction_content.strip()
-> ```
->
-> 2. 执行浏览器操作任务：
->
-> 通过browser-use库初始化所需组件并执行任务：
->
-> ```python
-> # 使用LLMConfig获取兼容的LLM
-> llm = self._get_llm(self.llm_config)
-> 
-> # 设置浏览器环境
-> browser_config = BrowserConfig(headless=False, viewport_size={"width": 1280, "height": 800})
-> browser = Browser(config=browser_config)
-> controller = Controller()
-> 
-> # 创建并运行Browser Agent
-> agent = Agent(
->     task=browser_task,
->     llm=llm,
->     browser=browser,
->     controller=controller,
->     generate_gif=False,
->     enable_memory=False
-> )
-> result = await agent.run(max_steps=100)
-> ```
->
-> 3. 从浏览器操作结果中提取关键信息并构建execute_result
->
-> ```python
-> # 构建执行结果
-> execute_result = {
->     "browser_use_result": {
->         "final_result": result.get("final_result", ""),
->         "urls_visited": result.get("urls", []),
->         "content_count": len(result.get("extracted_content", [])),
->     }
-> }
-> step_state.update_execute_result(execute_result)
-> ```
->
-> 构建结果摘要用于状态更新：
->
-> ```python
-> # 构建摘要信息
-> summary = self._build_result_summary(result)
-> # 包含访问的URL数量、提取的内容数量等关键信息
-> ```
-
-
-
-**其他状态同步：**
-
-1. 更新agent_step中当前step状态：
-   execute开始执行时更新状态为 “running”，完成时更新为 “finished”，失败时更新为 “failed”
-
-```python
-# 执行开始时
-agent_state["agent_step"].update_step_status(step_id, "running")
-
-# 执行成功时
-agent_state["agent_step"].update_step_status(step_id, "finished")
-
-# 执行失败时
-agent_state["agent_step"].update_step_status(step_id, "failed")
-```
-
-2. 在当前step.execute_result中记录工具解析结果：
-
-```python
-execute_result = {  
-    "browser_use_result": {  
-        "final_result": result.get("final_result", ""),  
-        "urls_visited": result.get("urls", []),  
-        "content_count": len(result.get("extracted_content", [])),  
-    }  
-}  
-step_state.update_execute_result(execute_result)  
-# 失败时记录错误信息
-execute_result = {"browser_use_error": error_msg}
-step_state.update_execute_result(execute_result)
-```
-
-3. 更新stage_state.every_agent_state中自己的状态：
-
-通过`update_stage_agent_state`字段指导sync_state更新，
-
-browser use顺利完成时`update_agent_situation`更新为 ”working“，失败时更新为 “failed”
-
-```python
-execute_output["update_stage_agent_state"] = {
-    "task_id": task_id,
-    "stage_id": stage_id,
-    "agent_id": agent_state["agent_id"],
-    "state": update_agent_situation,
-}
-```
-
-4. 添加步骤完成情况到task_state的共享消息池：
-
-通过`send_shared_message`字段指导sync_state更新，browser_use操作结果会包含摘要信息（如访问网站数量、提取内容数量等）
-
-```python
-# 成功情况下的共享消息
-execute_output["send_shared_message"] = {
-    "task_id": task_id,
-    "stage_id": stage_id,
-    "agent_id": agent_state["agent_id"],
-    "role": agent_state["role"],
-    "content": f"执行browser_use步骤: 完成: {summary}"
-}
-
-# 失败情况下的共享消息
-execute_output["send_shared_message"] = {
-    "task_id": task_id,
-    "stage_id": stage_id,
-    "agent_id": agent_state["agent_id"],
-    "role": agent_state["role"],
-    "content": f"执行browser_use步骤: 失败: {error_msg[:100]}"
-}
-```
 
 
 
