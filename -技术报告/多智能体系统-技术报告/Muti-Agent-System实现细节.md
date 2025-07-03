@@ -2775,6 +2775,17 @@ SyncState接收到消息查询指令后立刻回复消息给Agent，Agent立即�
 
 ## 4. Tool 工具
 
+我们所有的工具均以MCP（model context protocol）模型上下文协议的标准实现。为此我们的工具实现包含：
+
+- MCP Client ：实现基础的MCP客户端功能
+- MCP Tool Executor ： 负责在MAS系统中调用具体MCP Server的能力的执行器
+
+在此基础上，我们通过在MCP Client中加载各种第三方MCP Server，实现任意工具的高效拓展。
+
+
+
+**在MAS系统中调用工具说明**
+
 所有的工具 `tool` 一般都不包含LLM调用，工具的指令生成由专门的技能 `InstructionGeneration` 技能完成。因此一个基本的工具执行包含两个Step：
 
 ```python
@@ -2809,264 +2820,450 @@ SyncState接收到消息查询指令后立刻回复消息给Agent，Agent立即�
 
   
 
-### 4.1 MCP Server （TODO）
+### 4.1 MCP Client
 
+**基础方法**
 
+我们在 `mas.tools.mcp_client.py` 中实现 `MCPClient` 客户端类，用于向Executor提供MCP Client的相关功能：
 
 
 
+- `connect_to_server`: 连接指定的 MCP 服务器
 
+  该方法接受一个 `server_list` 的输入，根据  `server_list`  中的服务器名称，通过其在 MCPClient.server_config 中的配置连接到对应的 MCP 服务器。连接到指定 MCP 服务器，并将连接的服务器实例记录到 MCPClient.server_sessions 中。
 
+  
 
+  尝试连接时兼容本地/远程两种方式：
 
+  - 如果配置中有 "command" 字段，则认为是本地执行的 MCP 服务器，使用 stdio_client 连接。
+  - 如果配置中有 "baseurl" 字段，则认为是远程的 MCP 服务器，使用 sse_client 连接。
 
+  
 
+- `get_server_description`: 获取服务器支持的指定能力的详细描述，例如tools/resources/prompts
 
+  该方法接受两个参数的输入：
 
+  - `server_name`:  要获取描述的MCP Server名称
+  - `capability_type`: 要获取的能力类型，"tools"、"resources" 或"prompts"
 
 
+  尝试从server_descriptions中获取对应能力的详细描述。
 
+  - 优先从本地缓存 server_descriptions 获取。
+  - 否则通过已连接的MCP Server获取。
+      如果server_descriptions中没有该能力的描述，则从server_sessions对应活跃的MCP Server连接中调用能力描述信息。
+  - 如果没有连接过服务器，则尝试自动连接再请求描述。
+      如果server_sessions中没有对应的MCP Server连接，则从server_config中获取对应的MCP Server配置并连接。
 
 
 
+- `use_capability`: 使用指定能力并返回结果
 
+  从 MCPClient.server_sessions 中已连接的对应服务器会话，从中调用server指定能力。该方法接受四个参数的输入：
 
+  - `server_name`:  MCP Server的名称
+  - `capability_type`:  能力类型，可以是 "tools"、"resources" 或 "prompts"
+  - `capability_name`:  要调用的能力的具体名称
+  - `arguments`:  调用能力时需要传入的参数，以字典形式传入
 
+  
 
+  如果没有连接过服务器则会调用 `MCPClient.connect_to_server()` 方法连接服务器
 
+  如果已经已经连接过服务器，则根据能力类型的不同（tools/resources/prompts）使用session中的不同方法进行调用，并返回不同格式内容的结果
 
+  
 
+  **tools 能力类型时：**
 
+  调用方法 `session.call_tool(capability_name, arguments or {})`
 
+  传入参数 `arguments` 字典内容（根据获取的工具描述构造）：
 
+  ```python
+  {
+      "<PROPERTY_NAME>": PROPERTY_VALUE,
+      "<PROPERTY_NAME>": PROPERTY_VALUE,
+      ...
+  }
+  ```
 
+  返回工具结果 `result.content`：
 
+  ```python
+  [
+      {
+          "type": "text",
+          "text": "Current weather in New York:\nTemperature: 72°F\nConditions: Partly cloudy"
+      }
+  ],
+  ```
 
+  
 
+  **resources 能力类型时：**
 
+  调用方法 `session.read_resource(arguments.get("uri", ""))`
 
+  传入参数 `arguments` 字典内容（根据获取的资源描述构造）：
 
+  ```python
+  {"uri": "<RESOURCE_URI>"}
+  ```
 
+  返回工具结果 `result.contents`：
 
+  ```python
+  [
+    {
+      "uri": "test://static/resource/1",
+      "name": "Resource 1",
+      "title": "Rust Software Application Main File",
+      "mimeType": "text/x-rust",
+      "text": "Resource 1: This is a plaintext resource"
+    }
+  ]
+  ```
 
-### 4.2 Browser Use （TODO）
+  
 
-**期望作用：**
+  **prompts 能力类型时：**
 
-Agent通过browser_use工具能够执行自动化的网络浏览任务，包括访问网站、提取网页内容、填写表单、点击按钮等复杂的网页交互操作。
+  调用方法 `session.get_prompt(capability_name)`
 
-**说明：**
+  不需要传入任何参数 `arguments`
 
-Browser Use工具允许MAS系统直接与网络世界进行交互，扩展其信息获取和任务执行能力。工具使用底层的browser-use库，该库通过Playwright提供浏览器自动化能力，结合LLM的理解能力实现复杂网页任务的自动化完成。
+  返回工具结果 `result.messages`：
 
+  ```python
+  [
+      {
+          "role": "user",
+          "content": {
+              "type": "text",
+              "text": "Please review this Python code:\ndef hello():\n    print('world')"
+          }
+      }
+  ]
+  ```
 
+  
+
+  
+
+**状态管理**
+
+为了实现以上三个功能，我们实际对于MCP的连接管理有四种层级的划分（其中一三四级时MCPClient类中维护的状态，第二级是MAS中AgentState中实际可用的工具权限）：
 
-**具体实现：**
 
-从步骤状态获取指令:
 
-> 1.1 从step_state.instruction_content获取由instruction_generation技能生成的浏览器操作指令
->
-> 1.2 尝试提取指令生成中提取到的任务描述
+- 第一级：MCPClient.server_config
 
-执行浏览器操作任务:
+  存放了MAS中所有支持的MCP Server的启动配置
 
-> 2.1 根据LLM配置初始化兼容的LLM (OpenAI或Ollama)
->
-> 2.2 设置浏览器环境配置(Browser、Controller)
->
-> 2.3 创建并运行browser-use 第三方Agent执行任务，限制最大步骤数为100
->
-> 2.4 确保资源正确关闭(浏览器、playwright实例)
+  
 
-处理执行结果:
+- 第二级：AgentState.tools
 
-> 3.1 提取任务执行的最终结果(final_result)
->
-> 3.2 记录访问的URL列表(urls_visited)和提取的内容数量(content_count)
->
-> 3.3 构建结果摘要用于状态更新
+  存放了Agent可调用的外部工具（MCP服务）的权限。第二级可用MCP服务是第一级的子集。
 
-更新步骤状态:
+  
 
-> 4.1 成功执行时将步骤状态更新为finished
->
-> 4.2 失败时将步骤状态更新为failed并记录错误信息
+- 第三级：MCPClient.server_sessions
 
-返回用于指导状态同步的execute_output:
+  存放了活跃的MCP Server连接实例，key为MCP Server名称，value为requests.Session实例。
 
-> 5.1 通过update_stage_agent_state指导更新agent状态为working
->
-> 5.2 通过send_shared_message添加步骤执行结果到task共享消息池
+  server_sessions会动态连接第二级权限包含的MCP Server，并保证MAS中所有Agent的工具权限所涉及到的MCP Server都处于活跃连接状态。
 
+  
 
+  MCPClient.server_sessions 内容如下：
 
-错误处理:
+  ```python
+  {
+      "<SERVER_NAME>": <ClientSession>,  # 连接的 MCP 服务器会话实例
+  }
+  ```
 
-> 指令完全为空: 更新步骤状态为failed并返回错误信息
->
-> 浏览器操作失败：捕获并记录详细的异常信息，更新步骤状态为failed
->
-> LLM配置缺失：检查是否有可用的LLM配置，不存在则报错并更新状态
+  
 
-浏览器任务结果包含:
-
-> final_result: 任务执行的最终结果文本
->
-> urls_visited: 访问过的网页URL列表
->
-> extracted_content: 从网页中提取的内容列表
->
-> content_count: 提取内容的数量统计
-
-适用场景:
-
-> 网络信息采集：从多个网站收集特定信息
->
-> 自动化表单填写：完成注册、申请等需要填写表单的任务
->
-> 市场调研：收集产品信息、价格比较等
->
-> 自动化测试：验证网站功能和内容的有效性
->
-> 预约和订购: 自动化完成在线预约和订购流程
-
-注意事项:
-
-- 必须由instruction_generation技能先生成明确的浏览器操作指令
-- 指令应详细描述所需的浏览任务，包括目标网站、操作步骤和期望结果
-- 默认以非无头模式运行浏览器(headless=False)，便于观察和调试
-- 操作过程中的截图会保存到screenshots目录
-
-
-
-**交互行为：**
-
-> 1. 从指令中提取浏览器任务描述：
->
-> ```python
-> task_description  = step_state.instruction_content.strip()
-> ```
->
-> 2. 执行浏览器操作任务：
->
-> 通过browser-use库初始化所需组件并执行任务：
->
-> ```python
-> # 使用LLMConfig获取兼容的LLM
-> llm = self._get_llm(self.llm_config)
-> 
-> # 设置浏览器环境
-> browser_config = BrowserConfig(headless=False, viewport_size={"width": 1280, "height": 800})
-> browser = Browser(config=browser_config)
-> controller = Controller()
-> 
-> # 创建并运行Browser Agent
-> agent = Agent(
->     task=browser_task,
->     llm=llm,
->     browser=browser,
->     controller=controller,
->     generate_gif=False,
->     enable_memory=False
-> )
-> result = await agent.run(max_steps=100)
-> ```
->
-> 3. 从浏览器操作结果中提取关键信息并构建execute_result
->
-> ```python
-> # 构建执行结果
-> execute_result = {
->     "browser_use_result": {
->         "final_result": result.get("final_result", ""),
->         "urls_visited": result.get("urls", []),
->         "content_count": len(result.get("extracted_content", [])),
->     }
-> }
-> step_state.update_execute_result(execute_result)
-> ```
->
-> 构建结果摘要用于状态更新：
->
-> ```python
-> # 构建摘要信息
-> summary = self._build_result_summary(result)
-> # 包含访问的URL数量、提取的内容数量等关键信息
-> ```
-
-
-
-**其他状态同步：**
-
-1. 更新agent_step中当前step状态：
-   execute开始执行时更新状态为 “running”，完成时更新为 “finished”，失败时更新为 “failed”
+- 第四级：MCPClient.server_descriptions
+
+  存放了MCP Server中可用工具的详细描述，key为工具名称，value为工具描述。
+
+  server_descriptions 会从第三级中活跃session连接中调用工具名称，描述和使用方式并记录。
+
+  在Agent获取全部工具和技能提示词时，server_descriptions 相应支持；在Agent执行具体工具Step/组装工具Step提示词时，server_descriptions 也会提供具体工具的描述和调用格式信息。
+
+
+  MCPClient.server_descriptions 内容如下：
+
+  ```python
+  {
+      "<SERVER_NAME>": {
+          "capabilities":{
+              "prompts": bool,                                          # 是否支持提示词
+              "resources": bool,                                        # 是否支持资源
+              "tools": bool,                                            # 是否支持工具
+          },
+          "tools": {                                                    # 如果支持工具，则存储工具描述
+              "<TOOL_NAME>": {                                          # 工具名称
+                  "description": "<TOOL_DESCRIPTION>",
+                  "tittle": "<TOOL_TITLE>",                             # 工具标题
+                  "input_schema": {
+                      "type": "object",                                 # 工具输入参数类型
+                      "properties": {
+                          "<PROPERTY_NAME>": {                          # 工具输入参数名称
+                              "type": "<PROPERTY_TYPE>",                # 工具输入参数类型
+                              "description": "<PROPERTY_DESCRIPTION>",  # 工具输入参数描述
+                          },
+                          ...                                           # 其他输入参数
+                      }
+                  },
+                  "output_schema": <OUTPUT_SCHEMA>,                     # 工具输出参数的JSON Schema说明（可能类似input_schema），官方文档没有要求该字段，但是在一些实现中确实存在该字段
+                  "required": ["<PROPERTY_NAME>", ...]                  # 工具输入参数是否必需
+              },
+              ...                                                       # 其他工具
+          },
+          "resources": {                                                # 如果支持资源，则存储资源描述
+              "<RESOURCE_NAME>": {                                      # 资源名称
+                  "description": "<RESOURCE_DESCRIPTION>",              # 资源描述
+                  "title": "<RESOURCE_TITLE>",                          # 资源标题
+                  "uri": "<RESOURCE_URI>",                              # 资源URI
+                  "mimeType": "<RESOURCE_MIME_TYPE>",                   # 资源MIME类型
+              },
+              ...                                                       # 其他资源
+          },
+          "prompts": {                                                  # 如果支持提示词，则存储提示词描述
+              "<PROMPT_NAME>": {                                        # 提示词名称
+                  "description": "<PROMPT_DESCRIPTION>",                # 提示词描述
+                  "title": "<PROMPT_TITLE>",                            # 提示词标题
+                  "arguments": {                                        # 提示词参数
+                      "<ARGUMENT_NAME>": {                              # 提示词参数名称
+                          "description": "<ARGUMENT_DESCRIPTION>",      # 提示词参数描述
+                          "required": bool,                             # 提示词参数是否必需
+                      },
+                      ...                                               # 提示词参数其他属性
+                  }
+              },
+              ...                                                       # 其他提示词
+          },
+      }
+  }
+  ```
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+### 4.2 MCP Tool Executor （TODO）
+
+
+
+
+
+
+
+
+
+
+
+
+
+### 4.3 MCP 基础提示词
+
+MCP基础提示，一般只有在涉及到工具步骤的时候才会调用，例如InstructionGeneration / ToolDecision 。
+
+该提示的作用是教会Agent正确与MCP Server进行交互，包含:
+
+​	1.如何理解MCP Server能力列表
+
+​	2.如何生成MCP Server能力具体调用的参数
+
+​	3.如何理解MCP Server对能力调用的具体返回结果
+
+需要注意：
+
+​	Agent已经知晓如何调用MAS中的工具，只是不了解MCP协议。编写本提示中需要避免混淆 工具调用方式提示 和 Agent能直接看到的涉及到MCP协议执行过程的交互提示，本提示的重点在后者。
+
+
+
+MCP 基础提示词位于 `mas.tools.mcp_base_prompt.yaml` 中 `mcp_base_prompt` 字段：
 
 ```python
-# 执行开始时
-agent_state["agent_step"].update_step_status(step_id, "running")
+  MCP(model context protocol) Server 一般支持三种不同的 Capabilities，分别是：
+  - tools : 允许模型执行作或检索信息的可执行函数
+  - resources : 为模型提供额外上下文的结构化数据或内容
+  - prompts : 指导语言模型交互的预定义模板或说明
+  
+  作为MAS中的Agent，你所拥有的工具权限均来自于MCP Server(你的工具名称实际上对应的每个MCP服务的名称)。
+  MCP Server 的构成(注意：MCP Server不总是完全支持三种能力，大多数MCP Server仅支持tools调用能力):
+  MCP Server
+      ├── tools
+      │   ├── <tool_name>
+      │   └── ...
+      ├── resources
+      │   ├── <resource_name>
+      │   └── ...
+      └── prompts
+          ├── <prompt_name>
+          └── ...
+  
+  下面将介绍你会实际接触到的与MCP Server的交互说明：
+  
+  #### 1. 如何理解MCP Server能力列表
 
-# 执行成功时
-agent_state["agent_step"].update_step_status(step_id, "finished")
-
-# 执行失败时
-agent_state["agent_step"].update_step_status(step_id, "failed")
+  在你决策使用工具时，MAS会为你获取指定MCP Server所支持能力的列表
+  MAS会以以下格式的提示词呈现当前MCP Server支持能力的具体调用(以结构化的json数据提示)：
+      "tools": {
+          "<TOOL_NAME>": {
+              "description": "<TOOL_DESCRIPTION>",
+              "tittle": "<TOOL_TITLE>",
+              "input_schema": {
+                  "type": "object",
+                  "properties": {
+                      "<PROPERTY_NAME>": {
+                          "type": "<PROPERTY_TYPE>",
+                          "description": "<PROPERTY_DESCRIPTION>",
+                      },
+                      ...
+                  }
+              },
+              "output_schema": <OUTPUT_SCHEMA>,
+              "required": ["<PROPERTY_NAME>", ...]
+          },
+          ...
+      },
+      "resources": {
+          "<RESOURCE_NAME>": {
+              "description": "<RESOURCE_DESCRIPTION>",
+              "title": "<RESOURCE_TITLE>",
+              "uri": "<RESOURCE_URI>",
+              "mimeType": "<RESOURCE_MIME_TYPE>",
+          },
+          ...
+      },
+      "prompts": {
+          "<PROMPT_NAME>": {
+              "description": "<PROMPT_DESCRIPTION>",
+              "title": "<PROMPT_TITLE>",
+              "arguments": {
+                  "<ARGUMENT_NAME>": {
+                      "description": "<ARGUMENT_DESCRIPTION>",
+                      "required": bool,
+                  },
+                  ...
+              }
+          },
+          ...
+      },
+  根据以上格式的提示，你需要重点关注该Server支持何种能力下的哪些具体实现。
+  你需要根据每种具体实现的描述确定什么时候使用它，同时在使用具体能力的时候需要传入哪些参数。
+  
+  #### 2. 如何生成MCP Server能力具体调用的参数
+  当你决定需要调用MCP Server的某种具体能力时，你需要生成工具调用指令（这里默认你会将工具调用指令包裹在<tool_instruction>中）
+  - 如果你要使用MCP Server的tools能力：
+        <tool_instruction>
+        {
+            "tool_name": "<TOOL_NAME>",
+            "arguments": {
+                "<PROPERTY_NAME>": PROPERTY_VALUE,
+                "<PROPERTY_NAME>": PROPERTY_VALUE,
+                ...
+            }
+        }
+        </tool_instruction>
+    其中tool_name字段传入你要使用的MCP Server的工具名称，
+    arguments字段传入一个包含具体参数的字典，字典的键为该工具所需的参数名称，值为对应的参数值。
+    **请根据MCP Server能力列表中的提示信息，正确填写具体工具所需的参数。**
+  
+  - 如果你要使用MCP Server的resources能力：
+        <tool_instruction>
+        {
+            "resource_name": "<RESOURCE_NAME>",
+            "arguments": {"uri": "<RESOURCE_URI>"}
+        }
+        </tool_instruction>
+    其中resource_name字段传入你要使用的MCP Server的资源名称，
+    arguments字段仅需传入一个包含uri的字典，uri是该资源的访问地址（从MCP Server能力列表获得）。
+  
+  - 如果你要使用MCP Server的prompts能力，指令格式如下：
+      <tool_instruction>
+      {
+          "prompt_name": "<PROMPT_NAME>",
+          "arguments": None
+      }
+      </tool_instruction>    
+    其中prompt_name字段传入你要使用的MCP Server的prompt名称，
+    arguments字段传入None，因为prompt能力不需要任何其他参数
+  
+  **一定要看清你生成的是tool、resource还是prompt的指令，不要把能力搞混了。**
+  
+  #### 3. 如何理解MCP Server对能力调用的具体返回结果
+  当你通过生成具体指令调用MCP Server的某种能力时，MAS会为你获取该能力调用的返回结果。
+  该能力执行的返回结果会放在step_state.execute_result中，你需要熟悉MCP Server对能力调用的返回格式：
+  
+  - tool响应示例：
+    {
+      "content": [
+        {
+          "type": "text",
+          "text": "Current weather in New York:\nTemperature: 72°F\nConditions: Partly cloudy"
+        }
+      ],
+    }
+  
+  - resource响应示例：
+    {
+      "contents": [
+        {
+          "uri": "file:///project/src/main.rs",
+          "name": "main.rs",
+          "title": "Rust Software Application Main File",
+          "mimeType": "text/x-rust",
+          "text": "fn main() {\n    println!(\"Hello world!\");\n}"
+        }
+      ]
+    }
+  
+  - prompt响应示例：
+    {
+      "description": "Code review prompt",
+      "messages": [
+        {
+          "role": "user",
+          "content": {
+            "type": "text",
+            "text": "Please review this Python code:\ndef hello():\n    print('world')"
+          }
+        }
+      ]
+    }
+  
+  每种具体能力的响应示例都与MCP Server能力列表中的说明一一对应，请准确理解MCP Server的响应结果。
 ```
 
-2. 在当前step.execute_result中记录工具解析结果：
 
-```python
-execute_result = {  
-    "browser_use_result": {  
-        "final_result": result.get("final_result", ""),  
-        "urls_visited": result.get("urls", []),  
-        "content_count": len(result.get("extracted_content", [])),  
-    }  
-}  
-step_state.update_execute_result(execute_result)  
-# 失败时记录错误信息
-execute_result = {"browser_use_error": error_msg}
-step_state.update_execute_result(execute_result)
-```
 
-3. 更新stage_state.every_agent_state中自己的状态：
 
-通过`update_stage_agent_state`字段指导sync_state更新，
 
-browser use顺利完成时`update_agent_situation`更新为 ”working“，失败时更新为 “failed”
 
-```python
-execute_output["update_stage_agent_state"] = {
-    "task_id": task_id,
-    "stage_id": stage_id,
-    "agent_id": agent_state["agent_id"],
-    "state": update_agent_situation,
-}
-```
-
-4. 添加步骤完成情况到task_state的共享消息池：
-
-通过`send_shared_message`字段指导sync_state更新，browser_use操作结果会包含摘要信息（如访问网站数量、提取内容数量等）
-
-```python
-# 成功情况下的共享消息
-execute_output["send_shared_message"] = {
-    "task_id": task_id,
-    "stage_id": stage_id,
-    "agent_id": agent_state["agent_id"],
-    "role": agent_state["role"],
-    "content": f"执行browser_use步骤: 完成: {summary}"
-}
-
-# 失败情况下的共享消息
-execute_output["send_shared_message"] = {
-    "task_id": task_id,
-    "stage_id": stage_id,
-    "agent_id": agent_state["agent_id"],
-    "role": agent_state["role"],
-    "content": f"执行browser_use步骤: 失败: {error_msg[:100]}"
-}
-```
 
 
 
@@ -4406,7 +4603,24 @@ A B A A B B B B B B B B B A
 
 
 
-### 10.4 如何接入MCP服务
+### 10.4 如何接入MCP服务（TODO）
 
 为了兼容标准，我们希望我们也能享受到MCP服务的便利，我们需要将MCP服务的一部分与我们的MAS融合，以实现在MAS已有工作逻辑中支持调用任意MCP服务。
 
+最终我们选择将MAS系统中的工具库全盘使用MCP来构建，我们接受的任何一个基于MCP标准的服务无缝接入我们的MAS框架。
+
+
+
+**实现 MCP Client**
+
+首先我们实现了一个 MCP Client 用于维护和管理MAS中所有的MCP服务的连接会话。同时MCP Client还实现了 服务连接、服务能力的描述获取、服务能力的描述调用 等基础方法以供工具Executor使用
+
+
+
+**MAS 中组件合理访问 MCP Client**
+
+该MCP Client应当是全局唯一的，我们使ExecutorBase能够访问到这个全局唯一的MCP Client，即可让工具Executor子类访问到这个全局唯一的MCP Client。
+
+
+
+**实现 MCP Tool Executor**
