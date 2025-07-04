@@ -1447,22 +1447,21 @@ Profile:
 
   ```python
   "agent_step":{
-  	"step_list": List[Dict] # 包含多个步骤的列表，每个步骤以字典形式存储信息
-  	"todo_list": List(str) # 包含step_id的顺序列表
+  	"step_list": List[Dict] # 包含多个步骤的列表，每个步骤以字典形式存储信息，（这里step_list的顺序即是实际执行顺序，直接展示即可）
   }
   ```
-
-  其中step_list中每个步骤字典内容：
-
-  ```python
+  
+其中step_list中每个步骤字典内容：
+  
+```python
   {
       "step_id": str,
       "step_intention": str,
       "execution_state": str,
   }
   ```
-
   
+
 
 <img src="./asset/完整信息弹窗_Agent_C2执行.jpg" alt="完整信息弹窗_Agent_C2执行" style="zoom:13%;" />
 
