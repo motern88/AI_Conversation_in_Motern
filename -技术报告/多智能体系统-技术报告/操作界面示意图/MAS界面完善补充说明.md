@@ -87,3 +87,12 @@ Agent详细信息弹窗中 `执行` 一栏应当记录Agent下所有Step信息�
 图注：
 
 对话组界面中线（分隔 左侧对话组列表 和 右侧对话记录）希望增加可以左右拖动以缩放页面中左侧和右侧画幅比例的功能
+
+
+
+
+### 7. Step总览中展示的Step顺序错乱
+
+<img src="/C:/Users/20212/AppData/Roaming/Typora/typora-user-images/image-20250704114250874.png" alt="image-20250704114250874" style="zoom:67%;" />
+
+这里展示的Step顺序没有正确反映出step_list的顺序。step_list字段值是正常的，但是展示出的卡片顺序是不正常的。
