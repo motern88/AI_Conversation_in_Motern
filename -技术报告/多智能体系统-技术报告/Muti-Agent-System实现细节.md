@@ -102,8 +102,9 @@ MAS中由四种层级组成，分别是Team、Task Group、Stage、Step（Agent�
     task_manager (str): 任务管理者Agent ID，负责管理这个任务的Agent ID
 
     task_group (list[str]): 任务群组，包含所有参与这个任务的Agent ID
-    shared_message_pool (List[Dict]): 任务群组共享消息池（可选结构：包含agent_id, role, content等）
+    shared_message_pool (List[Dict]): 任务群组共享消息池（可选结构：包含agent_id, role, content等），主要记录行为Action
     communication_queue (queue.Queue): 用于存放任务群组的通讯消息队列，Agent之间相互发送的待转发的消息会被存放于此
+    shared_conversation_pool (List[Dict[str, Message]]): 任务群组共享会话池（Message），主要记录会话Message
 
     stage_list (List[StageState]): 当前任务下所有阶段的列表（顺序执行不同阶段）
     execution_state (str): 当前任务的执行状态，"init"、"running"、"finished"、"failed"
@@ -226,7 +227,10 @@ Agent被实例化时需要初始化自己的 agent_state, agent_state 会被持�
 
 消息分发类，一般实例化在MAS类中，与SyncState和Agent同级，用于消息分发。
 
-它会遍历所有 TaskState 的消息队列 `task_state.communication_queue`，捕获到消息后会调用agent.receive_message方法来处理消息。
+它会遍历所有 TaskState 的消息队列 `task_state.communication_queue`，捕获到消息后：
+
+1. 将消息分发给对应的 Agent（会调用agent.receive_message方法来处理消息）
+2. 记录该成功分发的消息到任务会话池中（追加到task_state.shared_conversation_pool中）
 
 
 
@@ -341,9 +345,17 @@ MAS系统接收到一个具体任务时，会实例化一个TaskState对象用�
 
   任务群组共享消息池（可选结构：包含agent_id, role, content等）
 
+  该消息池内容主要存放大家的执行动作记录
+
 - communication_queue (queue.Queue()):
 
   用于存放任务群组的通讯消息队列，Agent之间相互发送的待转发的消息会被存放于此。待MAS系统的消息处理模块定期扫描task_state的消息处理队列，执行消息传递任务。
+
+- self.shared_conversation_pool (List[Dict[str, Message]]):
+
+  任务群组共享会话池（Message）
+
+  记录的是对话信息，包含所有的消息记录，供Agent展示群聊使用。
 
 
 
@@ -4673,58 +4685,58 @@ A B A A B B B B B B B B B A
 
 #### 10.5.1 群聊消息的格式
 
-为了区分普通消息与群聊消息，一个最简单的增加群聊功能的方式便是为Message类型增加一个字段group_id用于区分是否属于群聊消息：
+> 为了区分普通消息与群聊消息，一个最简单的增加群聊功能的方式便是为Message类型增加一个字段group_id用于区分是否属于群聊消息：
+>
+> - 如果 `Message.group_id` 为None，则说明Message是不属于任何聊天群组中的消息
+> - 如果 `Message.group_id` 有值，则Message属于相应聊天群组中的消息
+>
+> 
+>
+> 那么对于Agent区分Message消息类型，首先我们考虑两种形式，
+>
+> - 一是HumanAgent区分group_id，LLMAgent不区分群聊与私聊。
+>
+>   此时有HumanAgent来判断LLMAgent发过来的消息应当归类为哪个group_id。
+>
+>   这也意味着在群聊中，LLMAgent无法主动发言（不区分群聊消息与私聊，故而只能发送私聊消息），只能被动回复来自HumanAgent的消息。
+>
+> - 二是HumanAgent与LLMAgent都区分群聊与私聊。
+>
+>   我们即面临LLMAgent如何区分群聊与私聊的问题：
+>
+>   - 只被动区分，不做主动区分。那么LLMAgent只能回复群聊消息，没法主动发起群聊消息。
+>
+>   - 做主动区分。那么LLMAgent需要辨别群聊与私聊的情形，LLMAgent至少需要获取到群聊中的属性和部分内容以做判断。但此时群聊记录是在HumanAgent中各自维护，而不由LLMAgent维护。
+>
+>     我们是否要为了LLMAgent能够判断群聊内容而在LLMAgent的状态中维护相应的群聊信息呢？这可能带来提示词增长的极大开销。
+>
+> 
+>
+> > 聊天群组（不论群聊或私聊）与我们最初的Agent通信设计相斥。我们最初设计MAS之间的通信不考虑持续性通信（即通信只考虑单次收发，不考虑维护一个通信池保持长期消息收发）。
+>
+> 要合理地实现持续性通信，我们可能不适合在Message这一级别的单次消息发送机制上修改。
 
-- 如果 `Message.group_id` 为None，则说明Message是不属于任何聊天群组中的消息
-- 如果 `Message.group_id` 有值，则Message属于相应聊天群组中的消息
+我们最终决定不为每一个群聊单独维护，我们将所有的群聊或私聊都看作是在Task下消息记录的子集。我们只实现一个由TaskState中维护的中心化的会话池，包含现有Task下的所有Message记录。
 
-
-
-那么对于Agent区分Message消息类型，首先我们考虑两种形式，
-
-- 一是HumanAgent区分group_id，LLMAgent不区分群聊与私聊。
-
-  此时有HumanAgent来判断LLMAgent发过来的消息应当归类为哪个group_id。
-
-  这也意味着在群聊中，LLMAgent无法主动发言（不区分群聊消息与私聊，故而只能发送私聊消息），只能被动回复来自HumanAgent的消息。
-
-- 二是HumanAgent与LLMAgent都区分群聊与私聊。
-
-  我们即面临LLMAgent如何区分群聊与私聊的问题：
-
-  - 只被动区分，不做主动区分。那么LLMAgent只能回复群聊消息，没法主动发起群聊消息。
-
-  - 做主动区分。那么LLMAgent需要辨别群聊与私聊的情形，LLMAgent至少需要获取到群聊中的属性和部分内容以做判断。但此时群聊记录是在HumanAgent中各自维护，而不由LLMAgent维护。
-
-    我们是否要为了LLMAgent能够判断群聊内容而在LLMAgent的状态中维护相应的群聊信息呢？这可能带来提示词增长的极大开销。
-
-
-
-> 聊天群组（不论群聊或私聊）与我们最初的Agent通信设计相斥。我们最初设计MAS之间的通信不考虑持续性通信（即通信只考虑单次收发，不考虑维护一个通信池保持长期消息收发）。
-
-要合理地实现持续性通信，我们可能不适合在Message这一级别的单次消息发送机制上修改。
-
-
-
-
-
-
+至此，HumanAgent将不再需要持有或维护群聊记录，而是直接向人类展示TaskState中会话池的子集。
 
 
 
-#### 10.5.2 HumanAgent持有的群聊记录
+**具体实现**
+
+我们将所有成功发送的Message记录在TaskState.shared_conversation_pool中，该列表：
+
+```python
+[
+	{"<timestamp>":Message},
+    {"<timestamp>":Message},
+    ...
+]
+```
 
 
 
-
-
-
-
-
-
-
-
-#### 10.5.3 界面展示
+#### 10.5.2 界面展示
 
 为了解决这个问题，我们可以在发送端增加一小步结构化操作，从**“发送对象”**和**“消息类型”**两个维度对信息进行结构化处理。
 
