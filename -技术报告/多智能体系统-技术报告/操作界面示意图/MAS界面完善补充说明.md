@@ -32,3 +32,37 @@
 ![image-20250708161431677](/C:/Users/20212/AppData/Roaming/Typora/typora-user-images/image-20250708161431677.png)
 
 这里共享消息池显示顺序改为倒叙比较好，让最新的消息放在最上面，旧的消息在最下面。
+
+
+
+### 3. Step总览显示
+
+![image-20250708175940009](/C:/Users/20212/AppData/Roaming/Typora/typora-user-images/image-20250708175940009.png)
+
+- 代表Agent的每一行的高度可以再低一点（矮一点），同理代表每个Step的元素块可以同步矮一点
+
+- 代表每个Step的元素块可以再窄一点：
+
+  其中当前显示是：
+
+  ```markdown
+  [skill] Planning
+  ```
+
+  但其实可以窄一点显示成
+
+  ```
+  [skill]
+  Planning
+  ```
+
+  其中Step类型（skill或tool）可以放在和状态指示灯同一行的位置；状态指示灯在最上行左边，Step类型在最上行右边
+
+
+
+### 4. Step完整信息弹窗-内容
+
+![image-20250708180727270](/C:/Users/20212/AppData/Roaming/Typora/typora-user-images/image-20250708180727270.png)
+
+Step完整信息展示中两个部分的标题可以去掉`|------------XXX------------|`的形式。
+直接显示Text content 和 Instruction content标题就好
