@@ -4,35 +4,7 @@
 
 
 
-
-### 1. Step总览中展示的Step顺序部分有误
-
-其实正常顺序应当是
-
-```
- 多个浅绿色块 -> 一个深绿色块 -> 多个灰色块
-```
-
-并且我记得step_list中直接顺序就是这样的，含义是：
-
-```
-已执行块 -> 正在执行块 -> 未执行块
-```
-
-
-
-现在Agent总览是正常的:
-![image-20250709093332275](/C:/Users/20212/AppData/Roaming/Typora/typora-user-images/image-20250709093332275.png)
-
-但是Step总览不正常：
-
-![image-20250709093411978](/C:/Users/20212/AppData/Roaming/Typora/typora-user-images/image-20250709093411978.png)
-
-
-
-
-
-### 2. Task完整信息弹窗中共享消息池显示
+### 1. Task完整信息弹窗中共享消息池显示
 
 ![image-20250708161431677](/C:/Users/20212/AppData/Roaming/Typora/typora-user-images/image-20250708161431677.png)
 
@@ -40,7 +12,7 @@
 
 
 
-### 3. Step总览显示
+### 2. Step总览显示
 
 ![image-20250708175940009](/C:/Users/20212/AppData/Roaming/Typora/typora-user-images/image-20250708175940009.png)
 
@@ -65,7 +37,7 @@
 
 
 
-### 4. Step完整信息弹窗-内容
+### 3. Step完整信息弹窗-内容
 
 ![image-20250708180727270](/C:/Users/20212/AppData/Roaming/Typora/typora-user-images/image-20250708180727270.png)
 
@@ -74,7 +46,7 @@ Step完整信息展示中两个部分的标题可以去掉`|------------XXX-----
 
 
 
-### 5. 完整信息弹窗窗口缩放
+### 4. 完整信息弹窗窗口缩放
 
 能不能让弹窗的窗口大小缩放，从只能拖拽右下角的特定位置，改为可以从上下左右四条边任意拖拽来缩放窗口大小？
 
@@ -82,7 +54,7 @@ Step完整信息展示中两个部分的标题可以去掉`|------------XXX-----
 
 
 
-### 6. 弹窗无法贴到浏览器边框
+### 5. 弹窗无法贴到浏览器边框
 
 ![image-20250708181536366](/C:/Users/20212/AppData/Roaming/Typora/typora-user-images/image-20250708181536366.png)
 
