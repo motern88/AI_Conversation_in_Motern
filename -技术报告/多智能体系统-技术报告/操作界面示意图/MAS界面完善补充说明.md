@@ -7,13 +7,7 @@
 
 ### 1. Step总览中展示的Step顺序部分有误
 
-<img src="/C:/Users/20212/AppData/Roaming/Typora/typora-user-images/image-20250708100649230.png" alt="image-20250708100649230" style="zoom:100%;" />
-
-![image-20250708101226888](/C:/Users/20212/AppData/Roaming/Typora/typora-user-images/image-20250708101226888.png)
-
-
-
-我猜测这里是不是特地设计了让init的灰色块排在最左边？其实正常顺序应当是
+其实正常顺序应当是
 
 ```
  多个浅绿色块 -> 一个深绿色块 -> 多个灰色块
@@ -24,6 +18,17 @@
 ```
 已执行块 -> 正在执行块 -> 未执行块
 ```
+
+
+
+现在Agent总览是正常的:
+![image-20250709093332275](/C:/Users/20212/AppData/Roaming/Typora/typora-user-images/image-20250709093332275.png)
+
+但是Step总览不正常：
+
+![image-20250709093411978](/C:/Users/20212/AppData/Roaming/Typora/typora-user-images/image-20250709093411978.png)
+
+
 
 
 
