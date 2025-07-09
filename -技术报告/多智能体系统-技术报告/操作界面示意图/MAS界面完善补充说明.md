@@ -42,10 +42,6 @@ API中获取到TaskState中对应字段从 `shared_message_pool`  变更为 `sha
   ```
 
   其中Step类型（skill或tool）可以放在和状态指示灯同一行的位置；状态指示灯在最上行左边，Step类型在最上行右边
-  
-- 底边的左右滑动条可以再大一点，并且能够支持**鼠标滚轮**进行左右滑动就好了
-
-  ![image-20250709150638676](/C:/Users/20212/AppData/Roaming/Typora/typora-user-images/image-20250709150638676.png)
 
 
 
