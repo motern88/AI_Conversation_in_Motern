@@ -102,7 +102,7 @@ MAS中由四种层级组成，分别是Team、Task Group、Stage、Step（Agent�
     task_manager (str): 任务管理者Agent ID，负责管理这个任务的Agent ID
 
     task_group (list[str]): 任务群组，包含所有参与这个任务的Agent ID
-    shared_message_pool (List[Dict]): 任务群组共享消息池（可选结构：包含agent_id, role, content等），主要记录行为Action
+    shared_info_pool (List[Dict]): 任务群组共享消息池（可选结构：包含agent_id, role, content等），主要记录行为Action
     communication_queue (queue.Queue): 用于存放任务群组的通讯消息队列，Agent之间相互发送的待转发的消息会被存放于此
     shared_conversation_pool (List[Dict[str, Message]]): 任务群组共享会话池（Message），主要记录会话Message
 
@@ -341,9 +341,9 @@ MAS系统接收到一个具体任务时，会实例化一个TaskState对象用�
 
   任务群组，包含所有参与这个任务的Agent ID
 
-- shared_message_pool (List[Dict]): 
+- shared_info_pool (List[Dict]): 
 
-  任务群组共享消息池（可选结构：包含agent_id, role, content等）
+  任务群组共享信息池（可选结构：包含agent_id, role, content等）
 
   该消息池内容主要存放大家的执行动作记录
 
@@ -749,7 +749,7 @@ sync_state（executor_output: Dict[str, any]）接收executor的输出字典，�
 | 匹配的key名                   | 功能                                                         |
 | ----------------------------- | ------------------------------------------------------------ |
 | update_stage_agent_state      | 更新Agent在stage中的状态                                     |
-| send_shared_message           | 添加共享消息到任务共享消息池                                 |
+| send_shared_info              | 添加共享信息到任务共享消息池                                 |
 | update_stage_agent_completion | 更新阶段中Agent完成情况                                      |
 | send_message                  | 将Agent.executor传出的消息添加到task_state.communication_queue通讯队列中 |
 | task_instruction              | 解析并执行具体任务管理操作：<br />1. 创建任务 add_task<br />2. 为任务创建阶段 add_stage<br />3. 结束任务 finish_task<br />4. 结束阶段 finish_stage<br />5. 重试阶段 retry_stage<br /> |
@@ -869,12 +869,12 @@ Planning需要有操作Agent中AgentStep的能力，AgentStep是Agent的执行�
 >
 > 4. 添加步骤完成情况到task_state的共享消息池：
 >
->    通过`send_shared_message`字段指导sync_state更新，
+>    通过`send_shared_info`字段指导sync_state更新，
 >
 >    Planning顺利完成时`shared_step_situation`更新为 ”finished“，失败时更新为 “failed”
 >
 >    ```python
->    execute_output["send_shared_message"] = {
+>    execute_output["send_shared_info"] = {
 >        "task_id": task_id,
 >        "stage_id": stage_id,
 >        "agent_id": agent_state["agent_id"],
@@ -992,12 +992,12 @@ Reflection需要获取到过去执行步骤的信息，并且具备操作AgentSt
 >
 > 4. 添加步骤完成情况到task_state的共享消息池：
 >
->    通过`send_shared_message`字段指导sync_state更新，
+>    通过`send_shared_info`字段指导sync_state更新，
 >
 >    Reflection顺利完成时`shared_step_situation`更新为 ”finished“，失败时更新为 “failed”
 >
 >    ```python
->    execute_output["send_shared_message"] = {
+>    execute_output["send_shared_info"] = {
 >        "task_id": task_id,
 >        "stage_id": stage_id,
 >        "agent_id": agent_state["agent_id"],
@@ -1138,12 +1138,12 @@ Summary技能对stage信息的获取来源于第一个步骤Planning_step：
 >
 > 4. 添加步骤完成情况到task_state的共享消息池：
 >
->    通过`send_shared_message`字段指导sync_state更新，
+>    通过`send_shared_info`字段指导sync_state更新，
 >
 >    summary顺利完成时`shared_step_situation`更新为 ”finished“，失败时更新为 “failed”
 >
 >    ```python
->    execute_output["send_shared_message"] = {
+>    execute_output["send_shared_info"] = {
 >        "task_id": task_id,
 >        "stage_id": stage_id,
 >        "agent_id": agent_state["agent_id"],
@@ -1278,12 +1278,12 @@ Instruction Generation会获取下一个工具step的信息，并具备更新下
 >
 > 4. 添加步骤完成情况到task_state的共享消息池：
 >
->    通过`send_shared_message`字段指导sync_state更新，
+>    通过`send_shared_info`字段指导sync_state更新，
 >
 >    instruction_generation顺利完成时`shared_step_situation`更新为 ”finished“，失败时更新为 “failed”
 >
 >    ```python
->    execute_output["send_shared_message"] = {
+>    execute_output["send_shared_info"] = {
 >        "task_id": task_id,
 >        "stage_id": stage_id,
 >        "agent_id": agent_state["agent_id"],
@@ -1386,12 +1386,12 @@ Instruction Generation会获取下一个工具step的信息，并具备更新下
 >
 > 4. 添加步骤完成情况到task_state的共享消息池：
 >
->    通过`send_shared_message`字段指导sync_state更新，
+>    通过`send_shared_info`字段指导sync_state更新，
 >
 >    think顺利完成时`shared_step_situation`更新为 ”finished“，失败时更新为 “failed”
 >
 >    ```python
->    execute_output["send_shared_message"] = {
+>    execute_output["send_shared_info"] = {
 >        "task_id": task_id,
 >        "stage_id": stage_id,
 >        "agent_id": agent_state["agent_id"],
@@ -1492,12 +1492,12 @@ Instruction Generation会获取下一个工具step的信息，并具备更新下
 >
 > 4. 添加步骤完成情况到task_state的共享消息池：
 >
->    通过`send_shared_message`字段指导sync_state更新，
+>    通过`send_shared_info`字段指导sync_state更新，
 >
 >    quick_think顺利完成时`shared_step_situation`更新为 ”finished“，失败时更新为 “failed”
 >
 >    ```python
->    execute_output["send_shared_message"] = {
+>    execute_output["send_shared_info"] = {
 >        "task_id": task_id,
 >        "stage_id": stage_id,
 >        "agent_id": agent_state["agent_id"],
@@ -1784,12 +1784,12 @@ Send Message首先会判断当前Agent已有的信息是否满足发送消息的
 >
 > 4. 添加步骤完成情况到task_state的共享消息池：
 >
->    通过`send_shared_message`字段指导sync_state更新，
+>    通过`send_shared_info`字段指导sync_state更新，
 >
 >    send_message顺利完成时`shared_step_situation`更新为 ”finished“，失败时更新为 “failed”
 >
 >    ```python
->    execute_output["send_shared_message"] = {
+>    execute_output["send_shared_info"] = {
 >        "task_id": task_id,
 >        "stage_id": stage_id,
 >        "agent_id": agent_state["agent_id"],
@@ -1933,12 +1933,12 @@ Process Message会理解并消化不需要回复的消息内容，并在必要�
 >
 > 4. 添加步骤完成情况到task_state的共享消息池：
 >
->    通过`send_shared_message`字段指导sync_state更新，
+>    通过`send_shared_info`字段指导sync_state更新，
 >
 >    process_message顺利完成时`shared_step_situation`更新为 ”finished“，失败时更新为 “failed”
 >
 >    ```python
->    execute_output["send_shared_message"] = {
+>    execute_output["send_shared_info"] = {
 >        "task_id": task_id,
 >        "stage_id": stage_id,
 >        "agent_id": agent_state["agent_id"],
@@ -2109,12 +2109,12 @@ Task Manager会参考自身历史步骤信息（前面步骤获取任务信息�
 >
 > 4. 添加步骤完成情况到task_state的共享消息池：
 >
->    通过`send_shared_message`字段指导sync_state更新，
+>    通过`send_shared_info`字段指导sync_state更新，
 >
 >    task_manager顺利完成时`shared_step_situation`更新为 ”finished“，失败时更新为 “failed”
 >
 >    ```python
->    execute_output["send_shared_message"] = {
+>    execute_output["send_shared_info"] = {
 >        "task_id": task_id,
 >        "stage_id": stage_id,
 >        "agent_id": agent_state["agent_id"],
@@ -2250,12 +2250,12 @@ Agent Manager会参考自身历史步骤信息（前面步骤获取相关Agent�
 >
 > 4. 添加步骤完成情况到task_state的共享消息池：
 >
->    通过`send_shared_message`字段指导sync_state更新，
+>    通过`send_shared_info`字段指导sync_state更新，
 >
 >    task_manager顺利完成时`shared_step_situation`更新为 ”finished“，失败时更新为 “failed”
 >
 >    ```python
->    execute_output["send_shared_message"] = {
+>    execute_output["send_shared_info"] = {
 >        "task_id": task_id,
 >        "stage_id": stage_id,
 >        "agent_id": agent_state["agent_id"],
@@ -2441,12 +2441,12 @@ SyncState接收到消息查询指令后立刻回复消息给Agent，Agent立即�
 >
 > 4. 添加步骤完成情况到task_state的共享消息池：
 >
->    通过`send_shared_message`字段指导sync_state更新，
+>    通过`send_shared_info`字段指导sync_state更新，
 >
 >    ask_info顺利完成时`shared_step_situation`更新为 ”finished“，失败时更新为 “failed”
 >
 >    ```python
->    execute_output["send_shared_message"] = {
+>    execute_output["send_shared_info"] = {
 >        "task_id": task_id,
 >        "stage_id": stage_id,
 >        "agent_id": agent_state["agent_id"],
@@ -2612,12 +2612,12 @@ SyncState接收到消息查询指令后立刻回复消息给Agent，Agent立即�
 >
 > 4. 添加步骤完成情况到task_state的共享消息池：
 >
->    通过`send_shared_message`字段指导sync_state更新，
+>    通过`send_shared_info`字段指导sync_state更新，
 >
 >    tool_decision顺利完成时`shared_step_situation`更新为 ”finished“，失败时更新为 “failed”
 >
 >    ```python
->    execute_output["send_shared_message"] = {
+>    execute_output["send_shared_info"] = {
 >        "task_id": task_id,
 >        "stage_id": stage_id,
 >        "agent_id": agent_state["agent_id"],
@@ -2731,12 +2731,12 @@ SyncState接收到消息查询指令后立刻回复消息给Agent，Agent立即�
 >
 > 4. 添加步骤完成情况到task_state的共享消息池：
 >
->    通过`send_shared_message`字段指导sync_state更新，
+>    通过`send_shared_info`字段指导sync_state更新，
 >
 >    Decision顺利完成时`shared_step_situation`更新为 ”finished“，失败时更新为 “failed”
 >
 >    ```python
->    execute_output["send_shared_message"] = {
+>    execute_output["send_shared_info"] = {
 >        "task_id": task_id,
 >        "stage_id": stage_id,
 >        "agent_id": agent_state["agent_id"],

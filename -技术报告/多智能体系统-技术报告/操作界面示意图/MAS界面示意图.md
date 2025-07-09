@@ -1328,11 +1328,11 @@ Task Summary:
 
 - communication_queue 当前未分发消息的通讯队列
 
-- shared_message_pool 任务群组共享消息池
+- shared_info_pool 任务群组共享信息池
 
 <img src="./asset/完整信息弹窗_Task_C3通讯.jpg" alt="完整信息弹窗_Task_C3通讯" style="zoom:13%;" />
 
-图注：`Task-C3`通讯一栏展示两个元素。`D1`展示任务下还未被分发的通讯数量，`D`呈现全部共享消息池内容。
+图注：`Task-C3`通讯一栏展示两个元素。`D1`展示任务下还未被分发的通讯数量，`D`呈现全部共享信息池内容。
 
 **呈现方式：**
 
@@ -1344,7 +1344,7 @@ Task Summary:
 
 元素`D`：
 
-shared_message_pool 内容 是一个包含字典的列表，每个字典代表一条消息：
+shared_info_pool 内容 是一个包含字典的列表，每个字典代表一条消息：
 
 ```python
 {"agent_id": str,
@@ -1353,7 +1353,7 @@ shared_message_pool 内容 是一个包含字典的列表，每个字典代表�
  "content": str，}
 ```
 
-在元素`D`中文字展示 shared_message_pool  内容：
+在元素`D`中文字展示 shared_info_pool  内容：
 
 ```markdown
 [<role>] <name> | <content>
