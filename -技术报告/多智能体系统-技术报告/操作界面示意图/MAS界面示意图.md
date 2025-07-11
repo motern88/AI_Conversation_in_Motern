@@ -1143,10 +1143,10 @@ Step执行器 executor：从步骤状态中获取 `executor (str)` 字段
 > <agent_id>4d68f8ca-b074-4a3c-8f3d-5755f177fa86</agent_id>
 > ```
 >
-> 则获取其agent id为`4d68f8ca-b074-4a3c-8f3d-5755f177fa86`的AgentState，并替换原文本，改为显示对应Agent的角色`role`和名字`name`：
+> 则获取其agent id为`4d68f8ca-b074-4a3c-8f3d-5755f177fa86`的AgentState，并替换原文本，改为显示对应Agent的名字`name`：
 >
 > ```
-> [多智能体系统管理者]灰风
+> 灰风
 > ```
 
 
@@ -1155,8 +1155,8 @@ Step执行器 executor：从步骤状态中获取 `executor (str)` 字段
 | --------------------- | ------------------------------------------------------------ |
 | <task_id></task_id>   | [Task]`task_name`                                            |
 | <stage_id></stage_id> | [Stage] `task_name` <br />注：这里需要通过StageState.task_id获取task_name |
-| <agent_id></agent_id> | [`role`] `name`                                              |
-| <step_id></step_id>   | [`type`] `executor`                                          |
+| <agent_id></agent_id> | `name`                                                       |
+| <step_id></step_id>   | `executor`                                                   |
 
 
 
@@ -1177,6 +1177,8 @@ Step执行器 executor：从步骤状态中获取 `executor (str)` 字段
 > 2. 输入框内会生成相应的超链接标签，在这个示例中即生成： `<agent_id>30df39fe-c988-4a63-93b6-ef0b4d9c9ece</agent_id>`
 >
 > 3. 生成的这个标签会被所有展示文本时的逻辑检测到，并自动将该超链接标签替换为实际可点击的对应**深黄色**字符串： `[多智能体系统管理者]灰风`
+
+若别人发给你的文本消息中包含超链接，则你也可以拖动该超链接到自己的文本输入框中，以形成对该超链接的复制！
 
 
 
@@ -2094,6 +2096,10 @@ execute_result 在元素`D`中集中显示，以字符串形式呈现。
 
 图注：完整对话窗口执行结果一栏中展示四个元素：`D0`展示当前任务群组会话中的任务信息与显示筛选；`D1` 展示所有历史对话信息；`D2` 展示所有参与该对话的Agent，其中每个Agent用一个元素 `E` 表示；`D3` 为聊天输入框。
 
+**注：聊天窗口需要支持多个聊天窗口合并**
+
+
+
 
 
 #### D0 任务信息与显示筛选
@@ -2200,6 +2206,8 @@ execute_result 在元素`D`中集中显示，以字符串形式呈现。
 
 图注：完整对话窗口中的`D1`元素详细构成：
 
+
+
 **呈现方式：**
 
 元素`E`：
@@ -2208,15 +2216,88 @@ execute_result 在元素`D`中集中显示，以字符串形式呈现。
 
 元素`F`：
 
-字符串填充，每一条对话以以下形式呈现：
+<img src="./asset/群聊窗口_F消息内容呈现.jpg" alt="群聊窗口_F消息内容呈现" style="zoom:13%;" />
 
-```markdown
-发送时间 [角色]名字  >  消息内容
-```
+图注：元素`F`的结构的内容组成（图示仅表示内容排列，并不代表`F`的每个子元素有边框区分）。其中`F0`为消息发送的时间；`F1`为发送者的名字；`F2`为具体消息内容；`F3`为消息类型；`F4`为接收者的超链接（这里超链接不是默认深黄色，而是淡蓝色和深蓝色）
 
-```markdown
-<timestamp> [<role>]<name>  >  <content>
-```
+- 元素`F0`：消息发送的时间
+
+  ```markdown
+  <timestamp>
+  ```
+
+  > 群聊消息中每条消息的Key为时间戳
+
+- 元素`F1`：发送者的名称
+
+  ```markdown
+  <name>
+  ```
+
+  > 由sender_id字段获取到对应Agent名称
+
+- 元素`F2`：消息内容
+
+  注意消息内容的起始行与`F0`,`F1`元素为同一行，其中与`F1`元素用“>”隔开，例如：
+
+  ```markdown
+  <timestamp> <name>  >  <content/message>
+  ```
+
+  > 私聊的消息内容字段名是content，群聊消息内容的字段名是message
+
+- 元素`F3`：消息类型
+
+  `F3`另起一行，不与`F2`的结尾在同一行；该元素由字段`need_reply`，`waiting`决定消息类型：
+
+  - 如果`need_reply = True`不需要回复，则元素`F3`什么都不显示，故此时不应该留有`F3`的空位，元素`F4`直接为这一行的开头。
+
+  - 如果`need_reply = True`，`waiting = None` 需要回复不需要等待，则元素`F3`呈现黄色“<span style="color:darkgoldenrod">需要回复</span>”字样
+  - 如果`need_reply = True`，`waiting != None` 需要回复且正在等待，则元素`F3`呈现红色“<span style="color:darkred">立即回复</span>”字样
+
+- 元素`F4`：接收者超链接
+
+  元素`F4`与`F3`位于同一行，为所有接收者的超链接，这里的超链接并非正常的深黄色，而是呈现浅蓝色。其中如果接收者为自己的超链接，则该超链接显示深蓝色。
+
+  > 例如，本聊天窗口中自己作为小黑，则一条发送给五个人的消息中，元素`F4`呈现的最终样貌：
+  >
+  > <span style="color:lightblue">小白</span> <span style="color:lightblue">小黄</span>  <span style="color:lightblue">小绿</span> <span style="color:darkblue">小黑</span>  <span style="color:lightblue">小蓝</span> 
+  >
+  > 以上每个Agent名字都是[超链接](#Link)
+
+  私聊中不存在元素`F4`，群聊中展示元素`F4`。获取receiver列表，生成其中所有接收者Agent的超链接。
+
+
+
+元素`F`的边框反映该条消息当前的状态：
+
+默认为无明显边框状态
+
+> **如何判定自己是否回复某条消息：**
+>
+> 1. 判断目标是否发给自己：
+>
+>    群聊中判断目标消息的receiver列表中是否包含自己的ID
+>
+>    私聊中则不需要判断，就是发给自己的
+>
+> 2. 如果waiting字段不为空，需要回复则获取自己对应的**唯一等待ID**：
+>
+>    则找到waiting列表中自己对应的唯一等待ID（receiver列表和waiting列表元素位置一一对应，如果waiting第N个元素含义为receiver第N个Agent对应的唯一等待ID）
+>
+> 3. 检查唯一等待ID是否被回收：
+>
+>    若以上两条均满足，且已经获取目标消息的唯一等待ID。则检查后续消息中的return_waiting_id字段是否出现该唯一等待ID。
+>
+> 如果以上三条均通过判断，则说明自己已经回复了该条消息。
+
+如果消息类型是需要自己回复，但是当前自己尚未回复，则整个F边框为细<span style="color:darkgoldenrod">黄色</span>描边。回复后恢复为无边框。
+
+如果消息类型是需要自己**立即**回复，但是当前自己尚未回复，则整个F边框为<span style="color:darkred">红色</span>描边。回复后恢复为无边框。
+
+
+
+------
 
 **数据来源：**
 
@@ -2274,6 +2355,8 @@ execute_result 在元素`D`中集中显示，以字符串形式呈现。
 
 
 
+------
+
 **筛选方式：**
 
 筛选方式针对于群聊消息，我们`D1`元素所展示的消息内容遵从`D0`元素的选择的筛选条件。
@@ -2292,7 +2375,7 @@ execute_result 在元素`D`中集中显示，以字符串形式呈现。
 
 
 
-
+------
 
 **交互功能：（TODO）**
 
