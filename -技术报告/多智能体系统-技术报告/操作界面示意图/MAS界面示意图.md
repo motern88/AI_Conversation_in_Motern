@@ -1002,9 +1002,51 @@ Step执行器 executor：从步骤状态中获取 `executor (str)` 字段
 
 其中B1元素和B2元素的分界线应当可以左右拖东，使得任意比例地平衡两个工作区的大小。
 
+**详细构成：**
+
+<img src="./asset/人类操作端_次要工作区.jpg" alt="人类操作端_次要工作区" style="zoom:13%;" />
+
+图注：次要工作区`B2`的详细构成。其中元素`C1`为绑定HumanAgent组件，元素`C2`展示HumanAgent的消息管理界面，元素`C3`为多功能区，元素`C4`为工具使用区，元素`C0`为消息提醒组件。
 
 
-### C1 绑定到已有HumanAgent中
+
+### C0 消息提醒组件
+
+消息提醒组件位于`B2`次要工作区的右下角
+
+`C0`用于展示已绑定的HumanAgent状态中的conversation_pool字典里的`global_messages`信息
+
+<img src="./asset/次要工作区B2_C0.jpg" alt="次要工作区B2_C0" style="zoom:13%;" />
+
+图注：展示`C0`元素的缩略状态（左）和展开状态（右），其中`C0`展开后呈现一个个全局消息，每个`D`元素代表一条消息。
+
+**呈现方式：**
+
+- 缩略状态（默认状态）：
+
+  显示喇叭状图标，当出现新的全局消息global_messages时图标闪烁（用户点击`C0`展开后图标恢复）
+
+- 展开状态（点击图标后）：
+
+  每一行元素`D`展示一条global_mesages全局消息内容，其中新的消息（列表末尾）在上面，旧的消息（列表开头）在下面。
+
+  其中每一条元素`D`展示global_mesages列表中的一个元素（字符串）。
+
+  > 如果其中存在超链接标签格式，以[超链接](#Link)形式呈现
+
+**数据来源：**
+
+根据C1 HumanAgent绑定组件所绑定的HumanAgent，获取其`AgentState["conversation"]["global_mesages"]`列表的内容
+
+**交互形式：**
+
+用户鼠标悬停`C0`时，显示”全局消息“字样
+
+用户点击`C0`时，展开`C0`；用户点击除了展开的`C0`外的任意地方时，关闭`C0`
+
+
+
+### C1 绑定HumanAgent组件
 
 在次要工作区`B2`中的`C1`元素里绑定一个人类操作端Agent。绑定后，用户在次要工作区`B2`中执行的任何操作与行为，均已MAS中该绑定的人类操作端Agent的身份执行。
 
@@ -1107,6 +1149,24 @@ Step执行器 executor：从步骤状态中获取 `executor (str)` 字段
 鼠标悬停显示”更换绑定的HumanAgent“字样；
 
 鼠标点击，元素`C1`展开，以支持更换人类操作端Agent绑定。
+
+
+
+### C2 消息管理组件（TODO）
+
+
+
+
+
+### C3 多功能区（TODO）
+
+
+
+
+
+### C4 工具使用区（TODO）
+
+
 
 
 
@@ -1842,7 +1902,7 @@ Step Intention: <step_intention>
 
 
 
-#### C6 对话消息（HumanAgent）
+#### C6 对话消息（仅HumanAgent）
 
 > Agent有两种类别，由语言模型驱动的LLM-Agent和人类操作端HumanAgent。
 > 可以从MutiAgent System的状态监控器获取ID区分：
