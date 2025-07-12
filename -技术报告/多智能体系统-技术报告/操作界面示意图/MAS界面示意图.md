@@ -1062,7 +1062,7 @@ Step执行器 executor：从步骤状态中获取 `executor (str)` 字段
 
 元素`D3`：
 
-当用户点击该元素`D3`时调用 [接口4：验证HumanAgent访问密码](#api_4) 将元素`D1`和元素`D2`的内容分别作为该API的`human_agent_id`和`password`参数值传递。
+当用户点击该元素`D3`时调用 [接口5：验证HumanAgent访问密码](#api_5) 将元素`D1`和元素`D2`的内容分别作为该API的`human_agent_id`和`password`参数值传递。
 
 - 如果接口返回验证密码成功，则`C1`有展开状态切换到缩略状态，并且后续在次要工作区`B2`的任意操作的发起者均为该`human_agent_id`
 
@@ -2427,7 +2427,7 @@ execute_result 在元素`D`中集中显示，以字符串形式呈现。
 
 <a id="T6_D3"></a>
 
-#### D3 聊天输入框 （TODO：群聊形式）
+#### D3 聊天输入框 
 
 在`D3`元素 聊天输入框，支持将用户输入的消息以接口形式在MAS中实际发送给相应的Agent
 
@@ -2555,11 +2555,11 @@ execute_result 在元素`D`中集中显示，以字符串形式呈现。
 
 ------
 
-元素`D3_1`：**TODO**
+元素`D3_1`：
 
 - 私聊中直接发送消息
 
-  使用 [接口3：人类操作端发送消息](#api_3) 其中传入参数：
+  使用 [接口3：人类操作端发送私聊消息](#api_3) 其中传入参数：
 
   - `task_id` 由 元素`D0`决定
   - `sender_id` 为自己
@@ -2588,27 +2588,88 @@ execute_result 在元素`D`中集中显示，以字符串形式呈现。
 
     其余两种情况均传入布尔值 False
 
-  - `return_waiting_id` 为空，传入None
-
 
 
 - 群聊中直接发送消息
 
-使用 [接口3：人类操作端发送消息](#api_3) 将用户的输入进行发送。
+  使用 [接口4：人类操作端发送群聊消息](#api_4) 将用户的输入进行发送，传入参数：
 
-需要注意发送方是当前界面中的HumanAgent，接受方是
+  - `task_id` 由 元素`D0`决定
+  - `sender_id` 为自己
+  - `receiver` **为`D3_2`中所有选中的Agent**
+  - `message` 为`D3_0`文本框输入内容
 
+  
 
+  - `stage_relative` 为`D3_1`的元素`K`决定：
+
+    若`K`选择为与阶段相关，则填充当前Task正在活跃的Stage的ID（Task有且仅有一个Stage活跃）
+
+    若`K`选择与阶段无关，则填入字符串"no_relative"
+
+  - `need_reply` 由`D3_3`决定：
+
+    若`D3_3`为**不需要回复**的消息 时，传入布尔值 False
+
+    其余两种情况均传入布尔值 True
+
+  
+
+  - `waiting` 由`D3_3`决定：
+
+    若`D3_3`为需要**立即回复**的消息 时，传入布尔值 True
+
+    其余两种情况均传入布尔值 False
+
+  - `return_waiting_id` 为空，传入None
 
 
 
 - 群聊中回复消息
 
+  > 右键某一条消息元素`F`可以选择"回复该消息"，此时进入群聊中回复该消息的逻辑分支
 
+  使用 [接口4：人类操作端发送群聊消息](#api_4) 将用户的输入进行发送，传入参数：
 
+  - `task_id` 由 元素`D0`决定
+  - `sender_id` 为自己
+  - `receiver` **为`D3_2`中所有选中的Agent**
+  - `message` 为`D3_0`文本框输入内容
 
+  
 
+  - `stage_relative` 为`D3_1`的元素`K`决定：
 
+    若`K`选择为与阶段相关，则填充当前Task正在活跃的Stage的ID（Task有且仅有一个Stage活跃）
+
+    若`K`选择与阶段无关，则填入字符串"no_relative"
+
+  - `need_reply` 由`D3_3`决定：
+
+    若`D3_3`为**不需要回复**的消息 时，传入布尔值 False
+
+    其余两种情况均传入布尔值 True
+
+  
+
+  - `waiting` 由`D3_3`决定：
+
+    若`D3_3`为需要**立即回复**的消息 时，传入布尔值 True
+
+    其余两种情况均传入布尔值 False
+
+  - `return_waiting_id` 的由本次回复的目标消息决定：
+
+    获取本条消息回复的目标消息的`waiting`列表中属于自己的那一个waiting_id。
+
+    > `waiting`列表和`receiver`列表元素一一对应，找到`receiver`中自己Agent所在的位置，获取`waiting`列表中相同位置的元素
+
+    将属于自己的waiting_id作为`return_waiting_id`的传入值。
+
+  
+
+> 前端不需要考虑私聊中回复消息，因为 [接口3：人类操作端发送私聊消息](#api_3) 可以自动判断私聊中的消息是否用于回复，并且可以在私聊中判定为回复消息时自动添加Message回复所需的`return_waiting_id`
+>
 
 
 
@@ -2709,7 +2770,9 @@ GET /api/state/<state_id>
 
 <a id="api_3"></a>
 
-## 接口3：人类操作端发送消息
+## 接口3：人类操作端发送私聊消息
+
+> 私聊接口与群聊接口的区别就是私聊不需要传入return_waiting_id字段，这个字段在私聊中可以由方法自己生成
 
 端口
 
@@ -2720,7 +2783,46 @@ GET /api/state/<state_id>
 URL
 
 ```python
-POST /api/send_message
+POST /api/send_private_message
+```
+
+| 参数名           | 描述                                                         | 示例                                                         | 格式      |
+| ---------------- | ------------------------------------------------------------ | ------------------------------------------------------------ | --------- |
+| `human_agent_id` | Agent ID                                                     | `74f5da18-fff9-4bef-b13e-0846f86f6f19`                       | str       |
+| `task_id`        | 任务ID                                                       | `082db0b7-86f9-4dd4-a56d-e27f271615e0`                       | str       |
+| `receiver`       | 包含接收者ID的列表                                           | `[286a854e-7404-4dad-b1c3-08ff6ab36e67,40da361c-cc6a-4b8c-9478-9066e67c0ff5,...]` | List[str] |
+| `content`        | 消息内容                                                     | `你好`                                                       | str       |
+| `stage_relative` | 如果消息与任务阶段相关，则填写对应阶段Stage ID，否则为"no_relative" | `61f36019-8a47-4a6c-b376-9dc6eecd15d8`                       | str       |
+| `need_reply`     | 是否需要回复                                                 | `True`                                                       | bool      |
+| `waiting`        | 是否等待其回复/需要其立即回复                                | `False`                                                      | bool      |
+
+返回格式
+
+```python
+{
+    "success": true,
+    "message": "消息已发送"
+}
+```
+
+
+
+<a id="api_4"></a>
+
+## 接口4：人类操作端发送群聊消息
+
+> 私聊接口与群聊接口的区别就是私聊不需要传入return_waiting_id字段，这个字段在私聊中可以由方法自己生成
+
+端口
+
+```python
+5000
+```
+
+URL
+
+```python
+POST /api/send_group_message
 ```
 
 | 参数名              | 描述                                                         | 示例                                                         | 格式          |
@@ -2745,9 +2847,9 @@ POST /api/send_message
 
 
 
-<a id="api_4"></a>
+<a id="api_5"></a>
 
-## 接口4：验证HumanAgent访问密码
+## 接口5：验证HumanAgent访问密码
 
 端口
 
