@@ -1152,19 +1152,147 @@ Step执行器 executor：从步骤状态中获取 `executor (str)` 字段
 
 
 
-### C2 消息管理组件（TODO）
+### C2 消息管理组件
+
+<img src="./asset/次要工作区_B2_C2.jpg" alt="次要工作区_B2_C2" style="zoom:13%;" />
+
+图注：消息管理组件`C2`示意图
+
+**呈现方式：**
+
+元素`D1`代表群聊会话组：
+
+上方优先展示所有群聊会话组
+
+背景呈浅紫色。
+
+元素`D1`上呈现对应聊天所属的任务名称：
+
+```
+任务名称
+[会话人数]
+```
+
+```markdown
+<task_name>
+[<task_group>]
+```
 
 
 
 
 
-### C3 多功能区（TODO）
+元素`D2`代表私聊会话组：
+
+元素排列顺序：在全部群聊会话组后接私聊绘画组
+
+背景呈浅绿色
+
+则元素`D2`上呈现对应聊天对象的Agent名称和Agent角色信息：
+
+```
+任务名称
+[角色] 名字
+```
+
+```markdown
+<task_name>
+[<role>]<name>
+```
+
+
+
+同时**始终展示和当前任务相关的群聊对话组**，需要根据AgentState.working_memory获取自身参与的任务，然后展示全部对应任务的TaskState.shared_conversation_pool
+
+
+
+**数据来源：**
+
+- 直接获取
+
+  - 群聊会话
+
+    `TaskState`中`shared_conversation_pool`，包含`str`时间戳和`message`对应的消息内容。其中：
+
+    ```python
+    [
+        {
+            "20250710T100803":
+            {
+            	"task_id": str,  # 任务ID
+        		"sender_id": str,  # 发送者ID
+        		"receiver": List[str],  # 接收者ID列表
+        		"message": str,  # 消息内容
+        		
+                "stage_relative": str,  # 是否与任务阶段相关，是则填对应阶段Stage ID，否则为'no_relative'的字符串
+        		"need_reply": bool,  # 发送者是否要求回复
+    
+        		"waiting": Optional[List[str]],  # 等待回复的唯一ID列表。（由发起方填写）包含与 receiver (List[str]) 中对应的每个接收者的唯一等待ID。如果发送者需要等待回复，则为所有发送对象填写唯一等待标识ID；不等待则为 None。如果等待，则发起者Agent将在回收全部等待标识前不会进行任何其他操作
+        		"return_waiting_id": Optional[str],  # 返回的唯一等待标识ID，如果该消息是用于回复此前正在等待回复的消息的，则通过此字段传递唯一等待ID，使发起者得以回收等待标识。
+            }
+        },
+        {"20250710T100819":{...}},
+        {"20250710T100838":{...}},
+        ...
+    ]
+    ```
+
+    
+
+  - 私聊会话
+
+    直接调用Agent状态查询API获取agent详细信息，如果该Agent状态属于HumanAgent，则HumanAgent会存在 conversation_pool 字段，该字段下：
+
+    ```python
+    agent_state["conversation_pool"] = {
+        "conversation_privates": Dict[str,List],  # 以agent_id为key的所有私聊对话组
+        "global_messages": List[str],  # 全局消息, 用于提醒该人类操作员自己的信息
+    }
+    ```
+
+    其中 conversation_privates 格式如下：
+
+    ```python
+    # 每个 <conversation_private> 是一个字典，包含与其他Agent的私聊对话信息：
+    "agent_id": {
+        "task_id" : [
+            {
+                "sender_id": str,  # 发送者Agent ID
+                "content": str,  # 消息内容
+                "stage_relative": str,  # 如果消息与任务阶段相关，则填写对应阶段Stage ID，否则为"no_relative"
+                "timestamp": str,  # 消息发送时间戳
+                "need_reply": bool,  # 是否需要回复
+                "waiting": bool,  # 如果需要回复，发起方是否正在等待该消息回复
+                "return_waiting_id": Optional[str], # 如果发起方正在等待回复，那么需要返回的唯一等待标识ID
+            }
+        ]
+    }
+    ```
+
+
+- 间接获取
+
+  已知 `agent_id` 调用Agent状态查询API获取agent详细信息
+
+  根据 `working_memory` 中Agent参与的任务，获取对应任务状态的`shared_conversation_pool`以获取任务群聊消息记录。
+
+
+
+**交互功能：**
+
+双击元素`E`弹出对应完整消息记录[T6 消息记录](#conversation)
 
 
 
 
 
-### C4 工具使用区（TODO）
+### C3 多功能区（TODO：暂未实现）
+
+
+
+
+
+### C4 工具使用区（TODO：暂未实现）
 
 
 
@@ -1931,16 +2059,16 @@ Step Intention: <step_intention>
 
 每个元素`E`代表一个对话组，如果是私聊对话组，则背景呈浅绿色；如果是群聊对话组，则背景呈浅黄色。
 
-- 如果是私聊对话组，则元素`E`上呈现对应聊天对象的Agent名称和Agent角色信息：
+- 如果是私聊对话组，则元素`E`上呈现对应聊天对象所处的任务名称，Agent名称和Agent角色信息：
 
   ```
-  名称
-  [角色]
+  任务名称
+  [角色] 名称
   ```
 
   ```markdown
-  <name>
-  [<role>]
+  <task_name>
+  [<role>] <name>
   ```
 
   
@@ -1971,7 +2099,6 @@ Step Intention: <step_intention>
 
 ```python
 agent_state["conversation_pool"] = {
-    "conversation_groups": List[Dict], # 所有群聊对话组
     "conversation_privates": Dict[str,List],  # 以agent_id为key的所有私聊对话组
     "global_messages": List[str],  # 全局消息, 用于提醒该人类操作员自己的信息
 }
@@ -1981,17 +2108,19 @@ agent_state["conversation_pool"] = {
 
 ```python
 # 每个 <conversation_private> 是一个字典，包含与其他Agent的私聊对话信息：
-"agent_id":[
-    {
-        "sender_id": str,  # 发送者Agent ID
-        "content": str,  # 消息内容
-        "stage_relative": str,  # 如果消息与任务阶段相关，则填写对应阶段Stage ID，否则为"no_relative"
-        "timestamp": str,  # 消息发送时间戳
-        "need_reply": bool,  # 是否需要回复
-        "waiting": bool,  # 如果需要回复，发起方是否正在等待该消息回复
-        "return_waiting_id": Optional[str], # 如果发起方正在等待回复，那么需要返回的唯一等待标识ID
-    }
-]
+"agent_id": {
+    "task_id" : [
+        {
+            "sender_id": str,  # 发送者Agent ID
+            "content": str,  # 消息内容
+            "stage_relative": str,  # 如果消息与任务阶段相关，则填写对应阶段Stage ID，否则为"no_relative"
+            "timestamp": str,  # 消息发送时间戳
+            "need_reply": bool,  # 是否需要回复
+            "waiting": bool,  # 如果需要回复，发起方是否正在等待该消息回复
+            "return_waiting_id": Optional[str], # 如果发起方正在等待回复，那么需要返回的唯一等待标识ID
+        }
+    ]
+}
 ```
 
 
@@ -2088,9 +2217,9 @@ Step Intention：
 text_content，insruction_content在元素`D`中集中显示，以字符串形式呈现。
 
 ```markdown
-|---------Text content----------|
+Text content
 <text_content>
-|-------Insruction content------|
+Insruction content
 <instruction_content>
 ```
 
@@ -2222,9 +2351,15 @@ execute_result 在元素`D`中集中显示，以字符串形式呈现。
 
 **数据来源：**
 
-直接获取：获取`TaskState`中`task_name`，`stage_list`
+直接获取：
+
+- 群聊中：获取`TaskState`中`task_name`，`stage_list`
+
+- 私聊中：`TaskState`由`AgentState["conversation_pool"]["conversation_privates"]["<agent_id>"]["<task_id>"]`获取到其Task ID
 
 间接获取：已知任务下的阶段ID，获取相应阶段的`stage_intention`和`agent_allocation`得到阶段意图和参与Agent
+
+
 
 **交互功能：**
 
@@ -2411,8 +2546,6 @@ execute_result 在元素`D`中集中显示，以字符串形式呈现。
     {"20250710T100838":{...}},
     ...
 ]
-
-
 ```
 
 - 间接获取
