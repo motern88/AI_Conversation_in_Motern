@@ -3998,7 +3998,7 @@ self.agent_state["conversation_pool"]["global_messages"].append(
 1. 对于需要人类理解并消化的消息，添加到`agent_state["conversation_pool"]["conversation_privates"]`中
 2. 对于start_stage指令，提醒人类操作员
 3. 对于finish_stage指令，提醒人类操作员，并清除相应工作记忆
-4. 对于finish_task指令，提醒人类操作员，清除相应工作记忆
+4. 对于finish_task指令，提醒人类操作员，清除相应工作记忆，和对应任务下私聊消息记录
 5. 对于update_working_memory指令，更新Agent的工作记忆
 
 其中通过增加 `agent_state["conversation_pool"]["global_messages"]` 的方式来提醒人类操作员，对话池中的全局消息应当在人类操作端界面上广播展示。

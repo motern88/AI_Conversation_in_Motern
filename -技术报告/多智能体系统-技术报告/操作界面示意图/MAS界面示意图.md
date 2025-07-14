@@ -1156,7 +1156,7 @@ Step执行器 executor：从步骤状态中获取 `executor (str)` 字段
 
 <img src="./asset/次要工作区_B2_C2.jpg" alt="次要工作区_B2_C2" style="zoom:13%;" />
 
-图注：消息管理组件`C2`示意图
+图注：消息管理组件`C2`示意图，其中`D1`代表一条群聊消息组。`D2`代表一条私聊消息组
 
 **呈现方式：**
 
@@ -1240,6 +1240,8 @@ Step执行器 executor：从步骤状态中获取 `executor (str)` 字段
     
 
   - 私聊会话
+
+    > `agent_state["conversation_pool"]["conversation_privates"]["agent_id"]["task_id"]`代表一个私聊会话组
 
     直接调用Agent状态查询API获取agent详细信息，如果该Agent状态属于HumanAgent，则HumanAgent会存在 conversation_pool 字段，该字段下：
 
@@ -2061,6 +2063,8 @@ Step Intention: <step_intention>
 
 - 如果是私聊对话组，则元素`E`上呈现对应聊天对象所处的任务名称，Agent名称和Agent角色信息：
 
+  > `agent_state["conversation_pool"]["conversation_privates"]["agent_id"]["task_id"]`代表一个私聊会话组
+
   ```
   任务名称
   [角色] 名称
@@ -2075,16 +2079,18 @@ Step Intention: <step_intention>
 
 - 如果是群聊对话组，则元素`E`上呈现对应聊天所属的任务名称：
 
+  > Agent的working_memory每参与一个Task，就有一个该Task的群聊对话组
+  
   ```
   任务名称
   [会话人数]
   ```
-
+  
   ```markdown
   <task_name>
   [<task_group>]
   ```
-
+  
   
 
 同时**始终展示和当前任务相关的群聊对话组**，需要根据AgentState.working_memory获取自身参与的任务，然后展示全部对应任务的TaskState.shared_conversation_pool
