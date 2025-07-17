@@ -2551,13 +2551,29 @@ SyncState接收到消息查询指令后立刻回复消息给Agent，Agent立即�
 
   Step（具体工具Tool执行）-> SyncState（生成指令消息）-> MessageDispatcher（分发消息给对应Agent）->  Agent（receive_message处理消息）-> Step（插入一个ToolDecision步骤）
 
+  
+
 - 执行该技能后，如果Tool Decision继续工具调用则有：
 
   Step（ToolDecision技能确认工具继续调用，追加接下来的工具调用步骤）-> Step（InstructionGeneration）-> Step（对应Tool）
 
+  
+
 - 执行该技能后，如果Tool Decision终止工具继续调用则有：
 
   Step（ToolDecision技能终止工具继续调用）
+  
+  
+  
+- 对于MCP工具的长尾调用，一个问题是首次调用返回的MCP工具调用描述capabilities_list_description，该如何通过tool_decision传达给下一个Instruction_Generation?
+
+  我们在tool_decision_config.yaml的提示词中指定其填入工具步骤的 text_content时有：
+
+  ```markdown
+  你需要工具在下次调用时完成的具体目标的详细提示文本，如果你已知晓MCP Server返回的capabilities_list_description，你应当在此处指导其MCP Server能力的具体的调用格式（请写入某个能力的返回描述的完整字典）。
+  ```
+
+  
 
 
 
