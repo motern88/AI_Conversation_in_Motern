@@ -3205,7 +3205,7 @@ class MultiAgentSystem:
 
 
 
-### 4.2 MCP Tool Executor （TODO）
+### 4.2 MCP Tool Executor
 
 **期望作用：**Agent通过调用该工具，从而能够调度任意MCP（Model Context Protocol）的服务器端点。（本MCP Tool用于在MAS中兼容MCP协议的服务器端实现。）
 
