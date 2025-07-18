@@ -3207,13 +3207,171 @@ class MultiAgentSystem:
 
 ### 4.2 MCP Tool Executor （TODO）
 
+**期望作用：**Agent通过调用该工具，从而能够调度任意MCP（Model Context Protocol）的服务器端点。（本MCP Tool用于在MAS中兼容MCP协议的服务器端实现。）
+
+
+
+**说明：**
+
+对于Agent而言，MCP工具连接多个MCP的服务端。对于真正的MCP Server端点而言，该MCP Server工具是他们的Client客户端。
+
+```python
+Agent  -->  MCP Tool    -->  MCP Server Endpoint
+Agent  <--  MCP Client  <--  MCP Server Endpoint
+```
+
+Agent通过mcp工具能够实现调用符合MCP协议的任意服务器端点。
+
+
+
+对于工具使用流程而言，在MAS中：
+   1. 获取到 MCP Server 级别描述：
+
+        Agent通过每个技能Executor中提示词“available_skills_and_tools”部分，可以获取到每个工具server写在 `mas/tools/mcp_server_config` 下 `<tool_name>_mcp_config.yaml` 文件中的描述，并根据此做出是否调用的决策。
+
+   2. 获取到 MCP Server 的具体能力级别的描述：
+
+        MCPTool Executor 通过调用 MCPClient 获取到当前工具下所有可用的能力的list（根据该MCP Server支持的能力，获取其所有能力对应的调用list）。并根据此做出具体调用哪个具体能力的决策。
+
+   3. 调用 MCP Server 的具体能力：
+
+        根据第2步获取到的能力列表，Agent可以选择调用其中的某个能力。并按照其格式 MCPTool Executor 通过调用 MCPClient 的 execute 方法，传入具体的能力名称和参数，来执行该能力并获取结果。
+
+
+
+在MCP Tool的实际执行过程中：
+
+- 指令生成和工具决策技能均能够获取 `mcp_base_prompt` 提示词：
+
+  指令生成技能Instruction Generation 在组装 tool step 提示词中包含 `mcp_base_prompt` ，工具决策技能 Tool Decision 在 `get_tool_decision_prompt()` 方法中包含 `mcp_base_prompt` 
+
+- 工具调用，有别于技能调用：
+
+  技能调用直接找到 `StepState.executor` 对应的技能 Executor 即可。但是工具中的`StepState.executor` 实际上是 MCP Server 的名字，而只要是工具 StepState 就会调用该 MCPToolExecutor 。
+
+  因此调用 MCPToolExecutor 的依据是 `StepState.type = tool` 就调用。
+
+  > 如果不接入MCP，则为每一个工具都实现一个Executor，此时执行步骤时传入的StepState.executor对应上相应的工具Executor即可；
+  >
+  > 然而，我们全盘接入MCP，则始终仅有一个MCPToolExecutor对应所有的MCP Server。
+  > 即，所有的工具Step，不论StepState.executor是什么，均会调用这一个MCPToolExecutor。
+  > （这一部分调用逻辑在Router路由中设置。）
 
 
 
 
 
+**具体实现：**
+
+我们的MCP Tool Executor负责获取StepState.instruction_content中的指令，解析并具体调用MCP Client的相关方法。
+
+在 `MCPTool.execute` 中：
+
+- 获取MCP服务的能力列表描述：
+
+  如果指令类型`instruction_type`字段是`get_description`，则获取MCP服务的能力列表描述：
+
+  ```python
+  mcp_server_name = step_state.executor  # 工具执行器名称即为MCP服务名称
+  capabilities_list_description = mcp_client_wrapper.get_capabilities_list_description(mcp_server_name)
+  ```
+
+  获取到能力描述后，插入追加工具决策Step：
+
+  ```python
+  # 如果获取到能力列表描述，同时触发tool_decision技能进一步决策调用哪个具体能力
+  self.add_next_tool_decision_step(
+      step_intention="决策调用MCP Server的具体能力",
+      text_content=f"根据上一步工具调用结果返回的capabilities_list_description能力列表描述，"
+                   f"决策使用哪个具体的能力进行下一步操作，以满足工具调用目标。\n"
+                   f"需要决策的工具名：<tool_name>{mcp_server_name}</tool_name>",
+      step_id=step_id,
+      agent_state=agent_state,
+  )
+  ```
+
+  
+
+- 执行MCP服务的具体能力:
+
+  如果指令类型`instruction_type`字段是`function_call`，则执行MCP服务的具体能力：
+
+  ```python
+  server_name = step_state.executor  # 工具执行器名称即为MCP服务名称
+  arguments = instruction_content.get("arguments", {})  # 获取指令内容中的参数，如果没有则默认为空字典
+  mcp_server_result = mcp_client_wrapper.use_capability_sync(
+      server_name=server_name,
+      capability_type=capability_type,
+      capability_name=capability_name,
+      arguments=arguments,
+  )
+  ```
+
+  获取到返回的调用结果后，插入追加工具决策Step：
+
+  ```python
+  # 更新执行结果，同时触发tool_decision技能进行工具调用的完成判定
+  self.add_next_tool_decision_step(
+      step_intention="决策工具调用完成与否",
+      text_content=f"根据上一步工具调用步骤的execute_result执行结果中返回的mcp_server_result具体调用结果，"
+                   f"决策当前工具调用目标是否达成。\n"
+                   f"需要决策的工具名：<tool_name>{server_name}</tool_name>，",
+      step_id=step_id,
+      agent_state=agent_state,
+  )
+  ```
 
 
+
+**其他状态同步：**
+
+> 1. 更新agent_step中当前step状态：
+>    execute开始执行时更新状态为 “running”，完成时更新为 “finished”，失败时更新为 “failed”
+>
+> 2. 在当前step.execute_result中记录技能解析结果：
+>
+>    - 如果指令类型是get_description ：
+>
+>      ```python
+>      step_state.update_execute_result({"capabilities_list_description": capabilities_list_description})
+>      ```
+>
+>    - 如果指令类型是function_call ：
+>
+>      ```python
+>      step.update_execute_result({"mcp_server_result": mcp_server_result})
+>      ```
+>
+> 3. 更新stage_state.every_agent_state中自己的状态：
+>
+>    通过`update_stage_agent_state`字段指导sync_state更新，
+>
+>    Decision顺利完成时`update_agent_situation`更新为 ”working“，失败时更新为 “failed”
+>
+>    ```python
+>    execute_output["update_stage_agent_state"] = {
+>        "task_id": task_id,
+>        "stage_id": stage_id,
+>        "agent_id": agent_state["agent_id"],
+>        "state": update_agent_situation,
+>    }
+>    ```
+>
+> 4. 添加步骤完成情况到task_state的共享消息池：
+>
+>    通过`send_shared_info`字段指导sync_state更新，
+>
+>    Decision顺利完成时`shared_step_situation`更新为 ”finished“，失败时更新为 “failed”
+>
+>    ```python
+>    execute_output["send_shared_info"] = {
+>        "task_id": task_id,
+>        "stage_id": stage_id,
+>        "agent_id": agent_state["agent_id"],
+>        "role": agent_state["role"],
+>        "content": f"执行Decision步骤:{shared_step_situation}，"
+>    }
+>    ```
 
 
 
