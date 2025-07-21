@@ -289,13 +289,11 @@ MultiAgentSystem 多Agent系统（简称MAS）的核心类，负责管理所有A
 
    指定MAS中第一个Agent为管理者，并启动其中的阶段
 
-4. 启动状态监控网页服务（可视化 + 热更新）
+4. 启动人类操作端和状态监控（可视化 + 热更新）的统一服务端口
+
+   用户在前端操作可以通过人类操作端接口操控相应HumanAgent
 
    状态监控服务server会同时实例化StateMonitor,以装饰器的形式获取MAS中的四种状态
-
-5. 主线程保持活跃，接受来自人类操作端的输入
-
-   人类操作端**（TODO）**
 
 
 
@@ -337,7 +335,9 @@ MultiAgentSystem 多Agent系统（简称MAS）的核心类，负责管理所有A
 
 - `step_state` 任务步骤状态（简单少量信息）：
 
-  记录Agent中每一个最小动作的执行情况。仅记录当前步骤进行的具体操作，所属的任务阶段与所属的Agent。Agent顺序执行步骤列表中待办步骤，**同一时刻，Agent中只有一个Step被执行**。
+  记录Agent中每一个最小动作的执行情况。仅记录当前步骤进行的具体操作，所属的任务阶段与所属的Agent。
+  
+  Agent顺序执行步骤列表中待办步骤，**同一时刻，Agent中只有一个Step被执行**。
 
 
 
@@ -372,6 +372,10 @@ MAS系统接收到一个具体任务时，会实例化一个TaskState对象用�
 - task_intention (str): 
 
   任务意图, 较为详细的任务目标说明
+  
+- task_manager (str):
+
+  任务管理者Agent ID，负责管理这个任务的Agent ID
 
 
 
@@ -427,7 +431,7 @@ MAS系统接收到一个具体任务时，会实例化一个TaskState对象用�
 
 #### 2.1.2 判定Task完成失败时的修正
 
-管理Agent会使用task_manager技能尝试为Task添加新的Stage来弥补不满足的条件
+管理Agent会使用task_manager技能尝试为Task添加新的Stage来弥补不满足的条件，进入到task_manager技能的`retry_stage`分支。
 
 
 
@@ -590,7 +594,7 @@ agent_state 是 Agent的重要承载体，它包含了一个Agent的所有状态
 | role              | str            | Agent的角色                                                  | 是        | 是         |
 | profile           | str            | Agent的角色简介                                              | 是        | 是         |
 | working_state     | str            | Agent的当前工作状态；<br /> idle 空闲, working 工作中, waiting 等待执行反馈中 | 是        | 是         |
-| llm_config        | Dict[str, Any] | 从配置文件中获取 LLM 配置                                    | 是        | 否         |
+| llm_config        | Dict[str, Any] | 从配置文件中获取 LLM 配置                                    | 是        | 是         |
 | human_config      | Dict[str, Any] | 从配置文件中获取人类账号密码等配置                           | 否        | 是         |
 | working_memory    | Dict[str, Any] | Agent工作记忆 {<task_id>: {<stage_id>: [<step_id>,...],...},...} 记录Agent还未完成的属于自己的任务 | 是        | 是         |
 | persistent_memory | Dict[str,str]  | 由Agent自主追加的永久记忆，不会因为任务、阶段、步骤的结束而被清空；<br />其中Key为时间戳 `%Y%m%dT%H%M%S`，<br />Value为md格式纯文本（里面只能用三级标题 ### 及以下！不允许出现一二级标题！） | 是        | 是         |
@@ -598,7 +602,7 @@ agent_state 是 Agent的重要承载体，它包含了一个Agent的所有状态
 | step_lock         | List[str]      | 一般用于及时通信中的步骤锁机制；<br />包含多个唯一等待ID的列表，只有列表中所有等待ID都回收后，才执行下一个step，否则会步骤锁会一直暂停执行下一个step | 是        | 否         |
 | tools             | List[str]      | Agent可用的技能                                              | 是        | 是         |
 | skills            | List[str]      | Agent可用的工具                                              | 是        | 是         |
-| conversation_pool | Dict[str, Any] | "conversation_groups"记录群聊对话组<br />"conversation_privates"记录一对一私聊对话组<br />"global_messages"记录用于通知人类操作员的全局重要信息 | 否        | 是         |
+| conversation_pool | Dict[str, Any] | "conversation_privates"记录一对一私聊对话组<br />"global_messages"记录用于通知人类操作员的全局重要信息 | 否        | 是         |
 |                   |                |                                                              |           |            |
 
 
@@ -728,6 +732,8 @@ Agent基础类 `AgentBase.process_message()` 接收到任务管理指令时，�
 - execute_result (Dict[str, Any]): 
 
   用来记录LLM输出解析或工具返回的结果，主要作用是向reflection反思模块提供每个步骤的执行信息
+  
+  
 
 ------
 
@@ -757,10 +763,16 @@ Agent的执行步骤管理类，用于管理Agent的执行步骤列表。包括�
 
 
 
+> - todo_lock (threading.lock)：
+>
+>   用于保护 todo_list 的并发修改
+
+
+
 #### 2.4.1 Step的清除机制
 
-与Stage相关的Step会在Agent接收到该Stage的“finish_stage”指令后清除，
-与Stage无关的Step会在Agent接收到该Task的“finish_task”指令后清除。
+与Stage相关的Step会在Agent接收到该Stage的“`finish_stage`”指令后清除，
+与Stage无关的Step会在Agent接收到该Task的“`finish_task`”指令后清除。
 
 
 
@@ -774,27 +786,30 @@ Agent的执行步骤管理类，用于管理Agent的执行步骤列表。包括�
 
 相对而言，Agent自身的局部状态，agent_state与step_state会在executor执行过程中更新。无需sync_state参与。
 
-executor执行返回的executor_output用于指导sync_state工作
+executor执行器返回的executor_output用于指导sync_state工作
 
 **属性：**
 
 - all_tasks（Dict[str, TaskState]）：存储系统中所有任务状态，键为 task_id，值为对应的 TaskState 实例
 
+
+
+> - _agents（List）：保存所有注册的 Agent（用弱引用，防止 Agent 被强引用导致不能销毁）
+> - system（MultiAgentSystem）：保存对 MultiAgentSystem 的引用
+
 **方法：**
 
-sync_state（executor_output: Dict[str, any]）接收executor的输出字典，根据字典中不同的字段更新不同的任务状态与阶段状态
+- sync_state（executor_output: Dict[str, any]）方法接收executor的输出字典，根据字典中不同的字段更新不同的任务状态与阶段状态：
 
-| 匹配的key名                   | 功能                                                         |
-| ----------------------------- | ------------------------------------------------------------ |
-| update_stage_agent_state      | 更新Agent在stage中的状态                                     |
-| send_shared_info              | 添加共享信息到任务共享消息池                                 |
-| update_stage_agent_completion | 更新阶段中Agent完成情况                                      |
-| send_message                  | 将Agent.executor传出的消息添加到task_state.communication_queue通讯队列中 |
-| task_instruction              | 解析并执行具体任务管理操作：<br />1. 创建任务 add_task<br />2. 为任务创建阶段 add_stage<br />3. 结束任务 finish_task<br />4. 结束阶段 finish_stage<br />5. 重试阶段 retry_stage<br /> |
-| agent_instruction             | 解析并执行具体Agent管理操作<br />1. 实例化新的Agent<br />2. 将Agent添加到任务群组中<br /> |
-| ask_info                      | 解析并执行具体信息查询操作<br />1. 查看自身所管理的task_state及其附属stage_state的信息<br />2. 查看自身所参与的task_state及参与的stage_state的信息<br />3. 查看指定task_state的信息<br />4. 查看指定stage_stage的信息<br /><br />5. 查看所有可直接实例化的Agent配置信息<br />6. 查看MAS中所有Agent的profile<br />7. 查看Team中所有Agent的profile<br />8. 查看指定task_id的task_group中所有Agent的profile<br />9. 查看指定stage下协作的所有Agent的profile<br />10. 查看指定agent_id或多个agent_id的详细agent_state信息<br /><br />11. 查看MAS中所有技能与工具的详细说明<br /> |
-|                               |                                                              |
-|                               |                                                              |
+  | 匹配的key名                   | 功能                                                         |
+  | ----------------------------- | ------------------------------------------------------------ |
+  | update_stage_agent_state      | 更新Agent在stage中的状态                                     |
+  | send_shared_info              | 添加共享信息到任务共享消息池                                 |
+  | update_stage_agent_completion | 更新阶段中Agent完成情况                                      |
+  | send_message                  | 将Agent.executor传出的消息添加到task_state.communication_queue通讯队列中 |
+  | task_instruction              | 解析并执行具体任务管理操作：<br />1. 创建任务 add_task<br />2. 为任务创建阶段 add_stage<br />3. 结束任务 finish_task<br />4. 结束阶段 finish_stage<br />5. 重试阶段 retry_stage<br /> |
+  | agent_instruction             | 解析并执行具体Agent管理操作<br />1. 实例化新的Agent<br />2. 将Agent添加到任务群组中<br /> |
+  | ask_info                      | 解析并执行具体信息查询操作<br />1. 查看自身所管理的task_state及其附属stage_state的信息<br />2. 查看自身所参与的task_state及参与的stage_state的信息<br />3. 查看指定task_state的信息<br />4. 查看指定stage_stage的信息<br /><br />5. 查看所有可直接实例化的Agent配置信息<br />6. 查看MAS中所有Agent的profile<br />7. 查看Team中所有Agent的profile<br />8. 查看指定task_id的task_group中所有Agent的profile<br />9. 查看指定stage下协作的所有Agent的profile<br />10. 查看指定agent_id或多个agent_id的详细agent_state信息<br /><br />11. 查看MAS中所有技能与工具的详细说明<br /> |
 
 
 
@@ -804,7 +819,9 @@ sync_state（executor_output: Dict[str, any]）接收executor的输出字典，�
 
 ## 3. Skill 技能
 
-所有的技能都会继承`mas.agent.base.executor_base.Executor`使用基础执行器类的通用方法
+Agent执行的最小单位Step拥有两种类型：技能Skill（需要调用LLM）和工具Tool（不需要调用LLM）。
+
+其中所有的技能都会继承`mas.agent.base.executor_base.Executor`使用基础执行器类的通用方法
 
 
 
@@ -2805,49 +2822,17 @@ SyncState接收到消息查询指令后立刻回复消息给Agent，Agent立即�
 
 
 
-### 3.14 （TODO）
-
-**期望作用：**
-
-
-
-**说明：**
-
-
-
-**提示词顺序：**
-
-系统 → 角色 → (目标 → 规则) → 记忆
-
-
-
-**具体实现：**
-
-
-
-**提示词：**
-
-
-
-**交互行为：**
-
-
-
-**其他状态同步：**
-
-
-
-
-
-
-
-
-
 
 
 ## 4. Tool 工具
 
-我们所有的工具均以MCP（model context protocol）模型上下文协议的标准实现。为此我们的工具实现包含：
+Agent执行的最小单位Step拥有两种类型：技能Skill（需要调用LLM）和工具Tool（不需要调用LLM）。
+
+我们所有的工具均以MCP（model context protocol）模型上下文协议的标准实现。因此我们仅需实现一个工具执行器 MCPToolExecutor 来继承 Executor 基础类，不需要为每个MCPServer均实现一个执行器类。
+
+> 在技能中，就是为每种情况的技能都实现一个SkillExecutor类
+
+我们的工具实现包含：
 
 - MCP Client ：实现基础的MCP客户端功能
 - MCP Tool Executor ： 负责在MAS系统中调用具体MCP Server的能力的执行器
@@ -2869,7 +2854,7 @@ SyncState接收到消息查询指令后立刻回复消息给Agent，Agent立即�
 对于工具的**长尾调用**，我们使用 `ToolDecision` 技能来串联：
 
 ```python
-([I.G.] -> [Tool]) -> [ToolDecision] -> ([I.G.] -> [Tool]) -> ......
+([I.G.] -> [Tool]) -> [ToolDecision] -> ([I.G.] -> [Tool]) -> [ToolDecision] ->......
 ```
 
 `ToolDecision` 技能负责调用LLM接收并处理长尾工具的返回结果，并决定下一步该工具的执行（指导指令生成步骤）或是结束长尾工具调用。
@@ -3150,17 +3135,17 @@ MCP Client本身具有管理连接会话的作用，我们希望整个MAS只维�
 
 我们于 `mas.async_loop` 实现 `AsyncLoopThread` 类和 `MCPClientWrapper` 类，其中：
 
-- AsyncLoopThread 主要向MultiAgentSystem提供异步环境，实现一个用于在多线程环境中运行异步任务的异步事件循环线程。
+- `AsyncLoopThread` 主要向MultiAgentSystem提供异步环境，实现一个用于在多线程环境中运行异步任务的异步事件循环线程。
 
-  由此可以在MAS中的Agent和Executor中向 AsyncLoopThread 提交异步调用任务而不引起额外阻塞。
+  由此可以在MAS中的Agent和Executor中向 `AsyncLoopThread` 提交异步调用任务而不引起额外阻塞。
 
-- MCPClientWrapper 主要用于在MAS中调用MCPClient方法，其负责将对MCPClient的调用提交到异步事件循环线程 AsyncLoopThread 中。
+- `MCPClientWrapper` 主要用于在MAS中调用 `MCPClient` 方法，其负责将对 `MCPClient` 的调用提交到异步事件循环线程 `AsyncLoopThread` 中。
 
-  由此MAS中给每个Agent和工具Executor传入的就不再是MCPClient实例，而是 MCPClientWrapper 包装器，调用 MCPClientWrapper 以实现在MAS中的异步调用MCPClient方法。
+  由此MAS中给每个Agent和工具Executor传入的就不再是 `MCPClient` 实例，而是 `MCPClientWrapper` 包装器，调用 `MCPClientWrapper` 以实现在MAS中的异步调用 `MCPClient` 方法。
 
 
 
-在 `MultiAgentSystem` 类的初始化中，我们初始化AsyncLoopThread，MCPClient和MCPClientWrapper：
+在 `MultiAgentSystem` 类的初始化中，我们初始化 `AsyncLoopThread` ， `MCPClient` 和 `MCPClientWrapper` ：
 
 ```python
 class MultiAgentSystem:
@@ -3183,7 +3168,7 @@ class MultiAgentSystem:
         return mcp_client
 ```
 
-此后新建Agent的时候传入的就是全局唯一的`mcp_client_wrapper`包装器而不是原始`mcp_client`实例。Agent通过Executor对`mcp_client_wrapper`的操作实现对MCPClient方法的异步调用。
+此后新建Agent的时候传入的就是全局唯一的 `mcp_client_wrapper` 包装器而不是原始 `mcp_client` 实例。Agent通过Executor对 `mcp_client_wrapper` 的操作实现对MCPClient方法的异步调用。
 
 
 
@@ -3197,7 +3182,7 @@ class MultiAgentSystem:
 
 - `get_capabilities_list_description` ：
 
-  获取 MCP 服务的 prompts/resources/tools 描述
+  获取 MCP 服务的 prompts、resources或tools 描述
 
 -  `use_capability_sync` ：
 
@@ -3397,172 +3382,168 @@ MCP基础提示，一般只有在涉及到工具步骤的时候才会调用，�
 
 MCP 基础提示词位于 `mas.tools.mcp_base_prompt.yaml` 中 `mcp_base_prompt` 字段：
 
-```python
-  MCP(model context protocol) Server 一般支持三种不同的 Capabilities，分别是：
-  - tools : 允许模型执行作或检索信息的可执行函数
-  - resources : 为模型提供额外上下文的结构化数据或内容
-  - prompts : 指导语言模型交互的预定义模板或说明
-  
-  作为MAS中的Agent，你所拥有的工具权限均来自于MCP Server(你的工具名称实际上对应的每个MCP服务的名称)。
-  MCP Server 的构成(注意：MCP Server不总是完全支持三种能力，大多数MCP Server仅支持tools调用能力):
-  MCP Server
-      ├── tools
-      │   ├── <tool_name>
-      │   └── ...
-      ├── resources
-      │   ├── <resource_name>
-      │   └── ...
-      └── prompts
-          ├── <prompt_name>
-          └── ...
-  
-  下面将介绍你会实际接触到的与MCP Server的交互说明：
-  
-  #### 1. 如何生成获取MCP Server能力列表的具体指令
-  在你首次使用该工具时，你如果没有获取过该工具的MCP Server能力列表，你应当首先获取其支持的MCP Server能力列表。
-  如果你当前正在执行Instruction Generation步骤你可以通过生成以下指令来使得下一个Tool Step进行能力列表的获取：
-      <tool_instruction>
-      {
-          "instruction_type": "get_description",
-      }
-      </tool_instruction>
-  其中instruction_type字段为"get_description"，表示这是一个获取MCP Server能力列表的指令。
-  **请确保你生成的指令使用<tool_instruction>标签包裹**
-  
-  #### 2. 如何理解MCP Server能力列表
-  在你决策使用工具时，MAS会为你获取指定MCP Server所支持能力的列表
-  MAS会以以下格式的提示词呈现当前MCP Server支持能力的具体调用(以结构化的json数据提示)：
-      "tools": {
-          "<TOOL_NAME>": {
-              "description": "<TOOL_DESCRIPTION>",
-              "tittle": "<TOOL_TITLE>",
-              "input_schema": {
-                  "type": "object",
-                  "properties": {
-                      "<PROPERTY_NAME>": {
-                          "type": "<PROPERTY_TYPE>",
-                          "description": "<PROPERTY_DESCRIPTION>",
-                      },
-                      ...
-                  }
-              },
-              "output_schema": <OUTPUT_SCHEMA>,
-              "required": ["<PROPERTY_NAME>", ...]
-          },
-          ...
-      },
-      "resources": {
-          "<RESOURCE_NAME>": {
-              "description": "<RESOURCE_DESCRIPTION>",
-              "title": "<RESOURCE_TITLE>",
-              "uri": "<RESOURCE_URI>",
-              "mimeType": "<RESOURCE_MIME_TYPE>",
-          },
-          ...
-      },
-      "prompts": {
-          "<PROMPT_NAME>": {
-              "description": "<PROMPT_DESCRIPTION>",
-              "title": "<PROMPT_TITLE>",
-              "arguments": {
-                  "<ARGUMENT_NAME>": {
-                      "description": "<ARGUMENT_DESCRIPTION>",
-                      "required": bool,
+```markdown
+MCP(model context protocol) Server 一般支持三种不同的 Capabilities，分别是：
+- tools : 允许模型执行作或检索信息的可执行函数
+- resources : 为模型提供额外上下文的结构化数据或内容
+- prompts : 指导语言模型交互的预定义模板或说明
+
+作为MAS中的Agent，你所拥有的工具权限均来自于MCP Server(你的工具名称实际上对应的每个MCP服务的名称)。
+MCP Server 的构成(注意：MCP Server不总是完全支持三种能力，大多数MCP Server仅支持tools调用能力):
+MCP Server
+  ├── tools
+  │   ├── <tool_name>
+  │   └── ...
+  ├── resources
+  │   ├── <resource_name>
+  │   └── ...
+  └── prompts
+      ├── <prompt_name>
+      └── ...
+
+下面将介绍你会实际接触到的与MCP Server的交互说明：
+
+#### 1. 如何生成获取MCP Server能力列表的具体指令
+在你首次使用该工具时，你如果没有获取过该工具的MCP Server能力列表，你应当首先获取其支持的MCP Server能力列表。
+如果你当前正在执行Instruction Generation步骤你可以通过生成以下指令来使得下一个Tool Step进行能力列表的获取：
+  <tool_instruction>
+  {
+      "instruction_type": "get_description",
+  }
+  </tool_instruction>
+其中instruction_type字段为"get_description"，表示这是一个获取MCP Server能力列表的指令。
+**请确保你生成的指令使用<tool_instruction>标签包裹**
+
+#### 2. 如何理解MCP Server能力列表
+在你决策使用工具时，MAS会为你获取指定MCP Server所支持能力的列表
+MAS会以以下格式的提示词呈现当前MCP Server支持能力的具体调用(以结构化的json数据提示)：
+  "tools": {
+      "<TOOL_NAME>": {
+          "description": "<TOOL_DESCRIPTION>",
+          "tittle": "<TOOL_TITLE>",
+          "input_schema": {
+              "type": "object",
+              "properties": {
+                  "<PROPERTY_NAME>": {
+                      "type": "<PROPERTY_TYPE>",
+                      "description": "<PROPERTY_DESCRIPTION>",
                   },
                   ...
               }
           },
-          ...
+          "output_schema": <OUTPUT_SCHEMA>,
+          "required": ["<PROPERTY_NAME>", ...]
       },
-  根据以上格式的提示，你需要重点关注该Server支持何种能力下的哪些具体实现。
-  你需要根据每种具体实现的描述确定什么时候使用它，同时在使用具体能力的时候需要传入哪些参数。
-  
-  #### 3. 如何生成MCP Server能力具体调用的参数
-  当你决定需要调用MCP Server的某种具体能力时，你需要生成工具调用指令（这里默认你会将工具调用指令包裹在<tool_instruction>中）
-  - 如果你要使用MCP Server的tools能力：
-        <tool_instruction>
-        {
-            "tool_name": "<TOOL_NAME>",
-            "arguments": {
-                "<PROPERTY_NAME>": PROPERTY_VALUE,
-                "<PROPERTY_NAME>": PROPERTY_VALUE,
-                ...
-            }
-        }
-        </tool_instruction>
-    其中tool_name字段传入你要使用的MCP Server的工具名称，
-    arguments字段传入一个包含具体参数的字典，字典的键为该工具所需的参数名称，值为对应的参数值。
-    **请根据MCP Server能力列表中的提示信息，正确填写具体工具所需的参数。**
-  
-  - 如果你要使用MCP Server的resources能力：
-        <tool_instruction>
-        {
-            "resource_name": "<RESOURCE_NAME>",
-            "arguments": {"uri": "<RESOURCE_URI>"}
-        }
-        </tool_instruction>
-    其中resource_name字段传入你要使用的MCP Server的资源名称，
-    arguments字段仅需传入一个包含uri的字典，uri是该资源的访问地址（从MCP Server能力列表获得）。
-  
-  - 如果你要使用MCP Server的prompts能力，指令格式如下：
-      <tool_instruction>
-      {
-          "prompt_name": "<PROMPT_NAME>",
-          "arguments": None
-      }
-      </tool_instruction>    
-    其中prompt_name字段传入你要使用的MCP Server的prompt名称，
-    arguments字段传入None，因为prompt能力不需要任何其他参数
-  
-  **一定要看清你生成的是tool、resource还是prompt的指令，不要把能力搞混了。**
-  
-  #### 4. 如何理解MCP Server对能力调用的具体返回结果
-  当你通过生成具体指令调用MCP Server的某种能力时，MAS会为你获取该能力调用的返回结果。
-  该能力执行的返回结果会放在step_state.execute_result中，你需要熟悉MCP Server对能力调用的返回格式：
-  
-  - tool响应示例：
-    {
-      "content": [
-        {
-          "type": "text",
-          "text": "Current weather in New York:\nTemperature: 72°F\nConditions: Partly cloudy"
-        }
-      ],
-    }
-  
-  - resource响应示例：
-    {
-      "contents": [
-        {
-          "uri": "file:///project/src/main.rs",
-          "name": "main.rs",
-          "title": "Rust Software Application Main File",
-          "mimeType": "text/x-rust",
-          "text": "fn main() {\n    println!(\"Hello world!\");\n}"
-        }
-      ]
-    }
-  
-  - prompt响应示例：
-    {
-      "description": "Code review prompt",
-      "messages": [
-        {
-          "role": "user",
-          "content": {
-            "type": "text",
-            "text": "Please review this Python code:\ndef hello():\n    print('world')"
+      ...
+  },
+  "resources": {
+      "<RESOURCE_NAME>": {
+          "description": "<RESOURCE_DESCRIPTION>",
+          "title": "<RESOURCE_TITLE>",
+          "uri": "<RESOURCE_URI>",
+          "mimeType": "<RESOURCE_MIME_TYPE>",
+      },
+      ...
+  },
+  "prompts": {
+      "<PROMPT_NAME>": {
+          "description": "<PROMPT_DESCRIPTION>",
+          "title": "<PROMPT_TITLE>",
+          "arguments": {
+              "<ARGUMENT_NAME>": {
+                  "description": "<ARGUMENT_DESCRIPTION>",
+                  "required": bool,
+              },
+              ...
           }
+      },
+      ...
+  },
+根据以上格式的提示，你需要重点关注该Server支持何种能力下的哪些具体实现。
+你需要根据每种具体实现的描述确定什么时候使用它，同时在使用具体能力的时候需要传入哪些参数。
+
+#### 3. 如何生成MCP Server能力具体调用的参数
+当你决定需要调用MCP Server的某种具体能力时，你需要生成工具调用指令（这里默认你会将工具调用指令包裹在<tool_instruction>中）
+- 如果你要使用MCP Server的tools能力：
+    <tool_instruction>
+    {
+        "tool_name": "<TOOL_NAME>",
+        "arguments": {
+            "<PROPERTY_NAME>": PROPERTY_VALUE,
+            "<PROPERTY_NAME>": PROPERTY_VALUE,
+            ...
         }
-      ]
     }
-  
-  每种具体能力的响应示例都与MCP Server能力列表中的说明一一对应，请准确理解MCP Server的响应结果。
+    </tool_instruction>
+其中tool_name字段传入你要使用的MCP Server的工具名称，
+arguments字段传入一个包含具体参数的字典，字典的键为该工具所需的参数名称，值为对应的参数值。
+**请根据MCP Server能力列表中的提示信息，正确填写具体工具所需的参数。**
+
+- 如果你要使用MCP Server的resources能力：
+    <tool_instruction>
+    {
+        "resource_name": "<RESOURCE_NAME>",
+        "arguments": {"uri": "<RESOURCE_URI>"}
+    }
+    </tool_instruction>
+其中resource_name字段传入你要使用的MCP Server的资源名称，
+arguments字段仅需传入一个包含uri的字典，uri是该资源的访问地址（从MCP Server能力列表获得）。
+
+- 如果你要使用MCP Server的prompts能力，指令格式如下：
+  <tool_instruction>
+  {
+      "prompt_name": "<PROMPT_NAME>",
+      "arguments": None
+  }
+  </tool_instruction>    
+其中prompt_name字段传入你要使用的MCP Server的prompt名称，
+arguments字段传入None，因为prompt能力不需要任何其他参数
+
+**一定要看清你生成的是tool、resource还是prompt的指令，不要把能力搞混了。**
+
+#### 4. 如何理解MCP Server对能力调用的具体返回结果
+当你通过生成具体指令调用MCP Server的某种能力时，MAS会为你获取该能力调用的返回结果。
+该能力执行的返回结果会放在step_state.execute_result中，你需要熟悉MCP Server对能力调用的返回格式：
+
+- tool响应示例：
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "Current weather in New York:\nTemperature: 72°F\nConditions: Partly cloudy"
+    }
+  ],
+}
+
+- resource响应示例：
+{
+  "contents": [
+    {
+      "uri": "file:///project/src/main.rs",
+      "name": "main.rs",
+      "title": "Rust Software Application Main File",
+      "mimeType": "text/x-rust",
+      "text": "fn main() {\n    println!(\"Hello world!\");\n}"
+    }
+  ]
+}
+
+- prompt响应示例：
+{
+  "description": "Code review prompt",
+  "messages": [
+    {
+      "role": "user",
+      "content": {
+        "type": "text",
+        "text": "Please review this Python code:\ndef hello():\n    print('world')"
+      }
+    }
+  ]
+}
+
+每种具体能力的响应示例都与MCP Server能力列表中的说明一一对应，请准确理解MCP Server的响应结果。
 ```
-
-
-
-
 
 
 
@@ -4216,13 +4197,14 @@ Task下所有的通信记录都会存放于 `shared_conversation_pool` ，因此
 
 
 
-
-
 ### 7.2 执行操作 （TODO）
 
 人类操作端能够手动执行可以调用的工具，同时会在AgentStep中记录工具执行调用结果（绑定在相应stage中）。
 
-
+> **TODO:**
+>
+> - **HumanAgent前端调用MCPServer的接口未实现。**
+> - **HumanAgent调用MCPServer方法未实现。**
 
 
 
@@ -4521,6 +4503,7 @@ Router类根据step_state.type和step_state.executor两个字符串，访问Exec
 ├── web/
 │   ├── server.py         # Flask + SocketIO 服务端
 │   └── templates/
+│		├── assets/       # 静态资源（CSS/JS）
 │       └── index.html    # 前端界面
 ```
 
@@ -4939,6 +4922,8 @@ A B A A B B B B B B B B B A
 
 ### 10.4 如何接入MCP服务
 
+> Date：2025/6/27
+
 为了兼容标准，我们希望我们也能享受到MCP服务的便利，我们需要将MCP服务的一部分与我们的MAS融合，以实现在MAS已有工作逻辑中支持调用任意MCP服务。
 
 最终我们选择将MAS系统中的工具库全盘使用MCP来构建，我们接受的任何一个基于MCP标准的服务无缝接入我们的MAS框架。
@@ -4983,8 +4968,9 @@ A B A A B B B B B B B B B A
 
 
 
-
 ### 10.5 向人类展示的群聊内容
+
+> Date：2025/7/7
 
 首先一个前提是，MAS中所有的私聊/群聊对话都依赖于任务Task，如果对话参与者不再同一个任务群组中，则无法互相对话。
 
