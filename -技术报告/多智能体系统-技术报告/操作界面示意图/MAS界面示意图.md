@@ -2683,7 +2683,7 @@ execute_result 在元素`D`中集中显示，以字符串形式呈现。
   如果选择的并非所有人，且接收者较少，此时`D3_2`缩略状态显示：
 
   ```markdown
-  接收者：<name>,<name>,<name>
+  @接收者：<name>,<name>,<name>
   ```
 
   如果接收者较多，则显示：
@@ -2953,9 +2953,16 @@ URL
 GET /api/state/<state_id>
 ```
 
-| 参数名     | 描述           | 示例               |
-| ---------- | -------------- | ------------------ |
-| `state_id` | 状态唯一 ID 值 | `TaskState_abc123` |
+| 参数名       | 描述           | 示例                                      |
+| ------------ | -------------- | ----------------------------------------- |
+| `<state_id>` | 状态唯一 ID 值 | `TaskState_abc123`  , `StageState_def456` |
+
+示例
+
+```python
+GET /api/state/TaskState_123d352a5d5
+GET /api/state/AgentState_4f14f41a2k4
+```
 
 返回格式
 
