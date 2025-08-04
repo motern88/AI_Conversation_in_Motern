@@ -1,14 +1,6 @@
 # Diffusion VS Flow Matching
 
-​                                                          
-
-
-
-
-
-
-
-
+[Diffusion Meets Flow Matching](https://diffusionflow.github.io/)
 
 
 
